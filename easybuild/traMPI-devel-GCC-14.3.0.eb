@@ -1,10 +1,10 @@
 easyblock = 'Bundle'
 
-name = 'trampi'
+name = 'traMPI'
 version = '0.1.0-devel'
 versionsuffix = '-%(software_commit)s'
 
-homepage = 'https://github.com/ocaisa/trampi'
+homepage = 'https://github.com/ocaisa/traMPI'
 description = """
 A trampoline generator for the MPI 5.0 ABI which generates an MPI 5.0 ABI
 library that can be overridden by the environment variable TRAMPI_ABI_LIBRARY.
@@ -21,12 +21,12 @@ builddependencies = [
 
 default_easyblock = 'CMakeMake'
 default_component_specs = {
-    'source_urls': ['https://github.com/ocaisa/trampi/archive'],
+    'source_urls': ['https://github.com/ocaisa/traMPI/archive'],
     'sources': [{
         'filename': '%(software_commit)s.tar.xz',
         "git_config": {
             "url": "https://github.com/ocaisa",
-            "repo_name": "trampi",
+            "repo_name": "traMPI",
             "commit": "%(software_commit)s",
             "recursive": True,
             },
@@ -35,36 +35,36 @@ default_component_specs = {
 
 components = [
     (name, version, {
-        'start_dir': 'trampi/mpi-abi-stubs',
+        'start_dir': 'traMPI/mpi-abi-stubs',
         'preconfigopts': " && ".join([
             # run trampi to create the header and .c files (note the next two lines are a single split string)
-            "(cd ../trampi && python -m trampi --header mpi-abi-stubs/mpi.h --stubs mpi-abi-stubs/mpilib.c "
+            "(cd ../traMPI && python -m trampi --header mpi-abi-stubs/mpi.h --stubs mpi-abi-stubs/mpilib.c "
             "--header-patch mpif/fortran/mpi.h.patch)",
             # Provide a default MPI ABI library (awful but necessary escaping)
             'export CFLAGS="$CFLAGS -DDEFAULT_TRAMPI_ABI_LIBRARY=\'\\"$EBROOTMPICH/lib/libmpi_abi.so\\"\'"',
             # manually set the default C and C++ compilers to what the toolchain uses
-            "sed -i 's/set(cc cc)/set(cc '$CC')/g' ../trampi/mpi-abi-stubs/CMakeLists.txt",
-            "sed -i 's/set(cc c++)/set(cc '$CXX')/g' ../trampi/mpi-abi-stubs/CMakeLists.txt",
+            "sed -i 's/set(cc cc)/set(cc '$CC')/g' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
+            "sed -i 's/set(cc c++)/set(cc '$CXX')/g' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
             # and tweak the template in general to accept TRAMPI_* variables
-            "sed -i '/^@CC@=@cc@/a MPI_@CC@=\"${MPI_@CC@:-$TRAMPI_@CC@}\"' ../trampi/mpi-abi-stubs/mpicc.in",
+            "sed -i '/^@CC@=@cc@/a MPI_@CC@=\"${MPI_@CC@:-$TRAMPI_@CC@}\"' ../traMPI/mpi-abi-stubs/mpicc.in",
             # also take the chance to configure our MPI launcher wrappers
             # (assumes the defaults are RPATH-ed executables which is true for MPICH and OpenMPI)
-            "sed -i 's|@DEFAULT_MPIRUN@|'$EBROOTMPICH/bin/mpirun'|' ../trampi/launcher_templates/mpirun.in",
-            "sed -i 's|@DEFAULT_MPIEXEC@|'$EBROOTMPICH/bin/mpiexec'|' ../trampi/launcher_templates/mpiexec.in",
+            "sed -i 's|@DEFAULT_MPIRUN@|'$EBROOTMPICH/bin/mpirun'|' ../traMPI/launcher_templates/mpirun.in",
+            "sed -i 's|@DEFAULT_MPIEXEC@|'$EBROOTMPICH/bin/mpiexec'|' ../traMPI/launcher_templates/mpiexec.in",
             "",
         ]),
-        'configopts': '-DSOURCE_C="../trampi/mpi_proxy.c" -DSOURCE_H="../trampi/mpi.h"',
+        'configopts': '-DSOURCE_C="../traMPI/mpi_proxy.c" -DSOURCE_H="../traMPI/mpi.h"',
     }),
     ('mpif', 'submodule', {
-        'start_dir': 'trampi/mpif',
+        'start_dir': 'traMPI/mpif',
         'preconfigopts': " && ".join([
-            # Force mpif to see our (just installed) trampi library first
+            # Force mpif to see our (just installed) traMPI library first
             'export LDFLAGS="-L%(installdir)s/lib"',
             # Tweak the MPI compiler wrapper to grab the default compiler from the PATH (and based on the toolchain)
-            "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../trampi/mpif/bin/mpifort.in",
+            "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../traMPI/mpif/bin/mpifort.in",
             # The hardcoded 16-byte alignment causes linker warnings on modern architectures, bump to __BIGGEST_ALIGNMENT__
             # (seems that more recent compilers are more aggressive here on CPUs with vector instructions)
-            "sed -i 's|16|__BIGGEST_ALIGNMENT__|g' ../trampi/mpif/src/mpif_constants.c",
+            "sed -i 's|16|__BIGGEST_ALIGNMENT__|g' ../traMPI/mpif/src/mpif_constants.c",
             "",
         ]),
         # Use our just installed MPI compiler as the C compiler
@@ -74,10 +74,10 @@ components = [
     }),
 ]
 
-# Also install our MPI launcher templates (which have been tweaked with in the trampi component to add a default)
+# Also install our MPI launcher templates (which have been tweaked with in the traMPI component to add a default)
 postinstallcmds = [
-    "cp %(builddir)s/trampi/launcher_templates/mpirun.in %(installdir)s/bin/mpirun",
-    "cp %(builddir)s/trampi/launcher_templates/mpiexec.in %(installdir)s/bin/mpiexec",
+    "cp %(builddir)s/traMPI/launcher_templates/mpirun.in %(installdir)s/bin/mpirun",
+    "cp %(builddir)s/traMPI/launcher_templates/mpiexec.in %(installdir)s/bin/mpiexec",
 ]
 
 sanity_check_paths = {

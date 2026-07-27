@@ -84,7 +84,7 @@ jobs:
       with:
         path: /home/runner/work/mpich/eessi
         key: mpich-gcc-${{ matrix.os }}-5.0.1-v3-${{ github.sha }}
-    - name: Test trampi via EESSI-extend
+    - name: Test traMPI via EESSI-extend
       shell: bash
       run: |
         export EESSI_PROJECT_INSTALL="/home/runner/work/mpich/eessi"
@@ -92,7 +92,7 @@ jobs:
         mkdir -p $EESSI_USER_INSTALL
         module load EESSI-extend
         unset EASYBUILD_DEBUG
-        if ! eb --software-commit="$GITHUB_SHA" easybuild/trampi-devel-GCC-14.3.0.eb; then
+        if ! eb --software-commit="$GITHUB_SHA" easybuild/traMPI-devel-GCC-14.3.0.eb; then
           echo
           echo "EasyBuild failed. Last log:"
           echo
@@ -102,7 +102,7 @@ jobs:
         echo
         echo "Check we can load the module:"
         echo
-        module load trampi
+        module load traMPI
         module list
         echo ""
         echo "Check the mpicc compiler works:"

@@ -1,10 +1,10 @@
-# `trampi`
+# traMPI
 
-`trampi` generates a trampoline implementation of the MPI ABI from an `mpi.h` header file and an `mpilib.c` file (which are expected to come from the [`mpi-abi-stubs` reference for the MPI standard ABI](https://github.com/mpi-forum/mpi-abi-stubs)). It also has (optional) support for [`mpif`](https://github.com/eschnett/mpif). The generated `mpi_proxy.c` (and potentially a patched `mpi.h` if using `mpif`) forwards all supported MPI and PMPI entry points to a backend MPI library that is selected at runtime. The library relies on `mpi-abi-stubs` to provide a build system.
+traMPI generates a trampoline implementation of the MPI ABI from an `mpi.h` header file and an `mpilib.c` file (which are expected to come from the [`mpi-abi-stubs` reference for the MPI standard ABI](https://github.com/mpi-forum/mpi-abi-stubs)). It also has (optional) support for [`mpif`](https://github.com/eschnett/mpif). The generated `mpi_proxy.c` (and potentially a patched `mpi.h` if using `mpif`) forwards all supported MPI and PMPI entry points to a backend MPI library that is selected at runtime. The library relies on `mpi-abi-stubs` to provide a build system.
 
 ## Why and how
 
-`trampi` scratches an itch for those who heavily use RPATH linking. An MPI ABI is only useful if you can easily switch out the active MPI backend library at runtime. This is typically done via `LD_LIBRARY_PATH`, but when you use RPATH this avenue is not open. This tool provides an ABI-compatible library that can be used for linking while still allowing for the selection of the actual backend MPI library at runtime via the environment variable `TRAMPI_ABI_LIBRARY` (which points to an MPI 5.0 ABI compatible library).
+traMPI scratches an itch for those who heavily use RPATH linking. An MPI ABI is only useful if you can easily switch out the active MPI backend library at runtime. This is typically done via `LD_LIBRARY_PATH`, but when you use RPATH this avenue is not open. This tool provides an ABI-compatible library that can be used for linking while still allowing for the selection of the actual backend MPI library at runtime via the environment variable `TRAMPI_ABI_LIBRARY` (which points to an MPI 5.0 ABI compatible library).
 
 The concept is heavily influenced by the design of [`MPItrampoline`](https://github.com/eschnett/MPItrampoline) and aided in implementation by AI (so probably not perfect but works with my testing to date).
 
