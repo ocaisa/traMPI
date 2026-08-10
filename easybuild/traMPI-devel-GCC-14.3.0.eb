@@ -55,16 +55,13 @@ components = [
         ]),
         'configopts': '-DSOURCE_C="../traMPI/mpi_proxy.c" -DSOURCE_H="../traMPI/mpi.h"',
     }),
-    ('mpif', 'submodule', {
+    ('mpif', 'cec074a0a42a78d0b6adc878e0fbe46ad15929f4', {
         'start_dir': 'traMPI/mpif',
         'preconfigopts': " && ".join([
             # Force mpif to see our (just installed) traMPI library first
             'export LDFLAGS="-L%(installdir)s/lib"',
             # Tweak the MPI compiler wrapper to grab the default compiler from the PATH (and based on the toolchain)
             "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../traMPI/mpif/bin/mpifort.in",
-            # The hardcoded 16-byte alignment causes linker warnings on modern architectures, bump to __BIGGEST_ALIGNMENT__
-            # (seems that more recent compilers are more aggressive here on CPUs with vector instructions)
-            "sed -i 's|16|__BIGGEST_ALIGNMENT__|g' ../traMPI/mpif/src/mpif_constants.c",
             "",
         ]),
         # Use our just installed MPI compiler as the C compiler
