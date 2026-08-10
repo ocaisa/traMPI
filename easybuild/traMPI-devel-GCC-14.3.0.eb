@@ -31,11 +31,11 @@ default_component_specs = {
             "recursive": True,
             },
     }],
-    'patches': ["mpif_mpilib.patch"]
 }
 
 components = [
     (name, version, {
+        'patches': ["mpif_mpilib.patch"],
         'start_dir': 'traMPI/mpi-abi-stubs',
         'preconfigopts': " && ".join([
             # run trampi to create the header and .c files (note the next two lines are a single split string)
@@ -66,7 +66,7 @@ components = [
             "",
         ]),
         # Use our just installed MPI compiler as the C compiler
-        'configopts': '-DMPI_HOME="%(installdir)s" -DCMAKE_C_COMPILER="%(installdir)s"/bin/mpicc',
+        'configopts': '-DMPI_HOME="%(installdir)s" -DMPI_C_COMPILER="%(installdir)s"/bin/mpicc_abi',
         # And make sure it sees our custom mpi header is preferred during the build (not the one from MPICH)
         'prebuildopts': 'export CPATH="%(installdir)s/include:${CPATH}" &&',
     }),
