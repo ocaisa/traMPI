@@ -138,17 +138,15 @@ def main():
             patched_header_path,
         )
         patch_text = f" and {patched_header_path}"
-        # Drop (P)MPI_Precv_init_c/(P)MPI_Psend_init_c completely from the main functions
+        # Drop (P)MPI_Precv_init(_c)/(P)MPI_Psend_init(_c) completely from the main functions, mpif will handle these
         # (this is an mpif decision, https://github.com/eschnett/mpif/commit/00782d33956f832d214696f78b138ce1958c922c)
-        exclude_list = ["MPI_Precv_init_c", "MPI_Psend_init_c", "PMPI_Precv_init_c", "PMPI_Psend_init_c"]
+        exclude_list = [
+            "MPI_Precv_init_c", "MPI_Psend_init_c", "PMPI_Precv_init_c", "PMPI_Psend_init_c",
+            "MPI_Precv_init", "MPI_Psend_init", "PMPI_Precv_init", "PMPI_Psend_init",
+        ]
         functions = [function for function in functions if function.name not in exclude_list]
 
-    # Remove duplicates, last declaration wins (shouldn't happen but still...)
-    all_functions = {function.name: function for function in functions}
-    # extension_functions may replace a function (case in point MPI_Precv_init/MPI_Psend_init)
-    all_functions.update({function.name: function for function in extension_functions})
-
-    all_functions = list(all_functions.values())
+    all_functions = functions + extension_functions
     verify(all_functions)
 
     print(f"Reading {args.stubs}")
