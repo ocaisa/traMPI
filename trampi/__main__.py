@@ -139,7 +139,11 @@ def main():
         )
         patch_text = f" and {patched_header_path}"
 
-    all_functions = functions + extension_functions
+    # Remove duplicates, last declaration wins (shouldn't happen but still...)
+    all_functions = {function.name: function for function in functions}
+    # extension_functions may replace a function (case in point MPI_Precv_init)
+    all_functions.update({function.name: function for function in extension_functions})
+    all_functions = list(all_functions.values())
     verify(all_functions)
 
     print(f"Reading {args.stubs}")
