@@ -43,13 +43,14 @@ jobs:
         module load EESSI-extend
         cd easybuild
         
-        # Let's store if anything is installed
+        # Let's check if anything is missing.
         echo ""
         echo "DEBUGGING: eb --missing MPICH-5.0.1-GCC-14.3.0*"
-        EB_MISSING=$(eb --missing MPICH-5.0.1-GCC-14.3.0*)
-        echo "$EB_MISSING" | grep "No missing modules"
-        echo "Exit code was $?"
-        if echo "$EB_MISSING" | grep -q "No missing modules"; then
+
+        EB_MISSING=$(eb --missing MPICH-5.0.1-GCC-14.3.0* 2>&1)
+        EB_STATUS=$?
+
+        if echo "$EB_MISSING" | grep -qF "No missing modules"; then
           echo "cache_changed=false" >> "$GITHUB_OUTPUT"
           echo ""
           echo "No need to run EasyBuild installation steps"
@@ -58,17 +59,20 @@ jobs:
           echo "Installing missing MPICH installations via EasyBuild"
           echo ""
 
-          # Grab the source files first 
+          # Grab the source files first
           eb --fetch MPICH-5.0.1-GCC-14.3.0.eb
-          
+
           # Then run the two builds in parallel
           # (with and without mpif)
           eb --robot MPICH-5.0.1-GCC-14.3.0-mpif.eb &
           pid1=$!
+
           eb --robot MPICH-5.0.1-GCC-14.3.0.eb &
           pid2=$!
+
           wait $pid1 || exit 1
           wait $pid2 || exit 1
+
           # If we got to here our cache has changed
           echo "cache_changed=true" >> "$GITHUB_OUTPUT"
           echo ""
