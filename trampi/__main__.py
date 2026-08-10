@@ -141,8 +141,16 @@ def main():
 
     # Remove duplicates, last declaration wins (shouldn't happen but still...)
     all_functions = {function.name: function for function in functions}
-    # extension_functions may replace a function (case in point MPI_Precv_init)
+    # extension_functions may replace a function (case in point MPI_Precv_init/MPI_Psend_init)
     all_functions.update({function.name: function for function in extension_functions})
+    if patch_text:
+        # Drop (P)MPI_Precv_init_c/(P)MPI_Psend_init_c completely
+        # (if that is wrong it will pop up in verification)
+        all_functions.pop("MPI_Precv_init_c", None)
+        all_functions.pop("MPI_Psend_init_c", None)
+        all_functions.pop("PMPI_Precv_init_c", None)
+        all_functions.pop("PMPI_Psend_init_c", None)
+
     all_functions = list(all_functions.values())
     verify(all_functions)
 

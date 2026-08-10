@@ -31,6 +31,7 @@ default_component_specs = {
             "recursive": True,
             },
     }],
+    'patches': ["mpif_mpilib.patch"]
 }
 
 components = [
