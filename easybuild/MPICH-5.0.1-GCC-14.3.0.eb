@@ -10,7 +10,7 @@ toolchainopts = {
     'extra_fflags': '-w -fallow-argument-mismatch -O2'
 }
 
-source_urls = [''https://github.com/pmodels/mpich/releases/download/v%(version)s/']
+source_urls = ['https://github.com/pmodels/mpich/releases/download/v%(version)s/']
 sources = ['mpich-%(version)s.tar.gz']
 
 dependencies = [
