@@ -56,18 +56,18 @@ components = [
         ]),
         'configopts': '-DSOURCE_C="../traMPI/mpi_proxy.c" -DSOURCE_H="../traMPI/mpi.h"',
     }),
-    ('mpif', 'cec074a0a42a78d0b6adc878e0fbe46ad15929f4', {
+    ('mpif', '1.0.0', {
         'start_dir': 'traMPI/mpif',
         'preconfigopts': " && ".join([
             # Force mpif to see our (just installed) traMPI library first
-            'export LDFLAGS="-L%(installdir)s/lib"',
+            # 'export LDFLAGS="-L%(installdir)s/lib"',
             # Tweak the MPI compiler wrapper to grab the default compiler from the PATH (and based on the toolchain)
             "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../traMPI/mpif/bin/mpifort.in",
             "",
         ]),
         # Use our just installed MPI compiler as the C compiler
         'configopts': '-DMPI_HOME="%(installdir)s" -DMPI_C_COMPILER="%(installdir)s"/bin/mpicc_abi',
-        # And make sure it sees our custom mpi header is preferred during the build (not the one from MPICH)
+        # Make sure our custom mpi header is preferred during the build (not the one visible from MPICH build dep)
         'prebuildopts': 'export CPATH="%(installdir)s/include:${CPATH}" &&',
     }),
 ]
