@@ -10,8 +10,8 @@ toolchainopts = {
     'extra_fflags': '-w -fallow-argument-mismatch -O2'
 }
 
-source_urls = ['https://www.mpich.org/static/downloads/%(version)s']
-sources = [SOURCELOWER_TAR_GZ]
+source_urls = ['https://github.com/pmodels/mpich/releases/download/v%(version)s/']
+sources = ['mpich-%(version)s.tar.gz']
 
 dependencies = [
     ('hwloc', '2.12.1'),
