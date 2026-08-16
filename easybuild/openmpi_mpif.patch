@@ -1,0 +1,441 @@
+diff -ruN ompi_orig/ompi/mpi/c/Makefile_abi.include ompi/ompi/mpi/c/Makefile_abi.include
+--- ompi_orig/ompi/mpi/c/Makefile_abi.include	1970-01-01 01:00:00.000000000 +0100
++++ ompi/ompi/mpi/c/Makefile_abi.include	2026-08-16 14:41:40.730289770 +0200
+@@ -46,7 +46,7 @@
+ extra_abi_fns = \
+         aint_add_abi.c \
+         aint_diff_abi.c \
+-        comm_fromint_abi.c \
++        f2c_abi.c comm_fromint_abi.c \
+         comm_toint_abi.c \
+         errhandler_fromint_abi.c \
+         errhandler_toint_abi.c \
+diff -ruN ompi_orig/ompi/mpi/c/f2c_abi.c ompi/ompi/mpi/c/f2c_abi.c
+--- ompi_orig/ompi/mpi/c/f2c_abi.c	1970-01-01 01:00:00.000000000 +0100
++++ ompi/ompi/mpi/c/f2c_abi.c	2026-08-16 14:40:30.684579389 +0200
+@@ -0,0 +1,425 @@
++// For OpenMPI
++
++#include "ompi_config.h"
++
++#include "ompi/mpi/c/bindings.h"
++#include "ompi/runtime/params.h"
++
++#include "ompi/mpi/c/abi.h"
++
++#define MPI_Aint MPI_Aint_ABI_INTERNAL
++// #define MPI_Fint MPI_Fint_ABI_INTERNAL
++#define MPI_Count MPI_Count_ABI_INTERNAL
++#define MPI_Offset MPI_Offset_ABI_INTERNAL
++
++#define MPI_Status MPI_Status_ABI_INTERNAL
++
++#define MPI_Comm MPI_Comm_ABI_INTERNAL
++#define MPI_Errhandler MPI_Errhandler_ABI_INTERNAL
++#define MPI_File MPI_File_ABI_INTERNAL
++#define MPI_Group MPI_Group_ABI_INTERNAL
++#define MPI_Info MPI_Info_ABI_INTERNAL
++#define MPI_Message MPI_Message_ABI_INTERNAL
++#define MPI_Op MPI_Op_ABI_INTERNAL
++#define MPI_Request MPI_Request_ABI_INTERNAL
++#define MPI_Session MPI_Session_ABI_INTERNAL
++#define MPI_Datatype MPI_Datatype_ABI_INTERNAL
++#define MPI_Win MPI_Win_ABI_INTERNAL
++
++// #define MPI_STATUS_IGNORE MPI_STATUS_IGNORE_ABI_INTERNAL
++// #define MPI_STATUSES_IGNORE MPI_STATUSES_IGNORE_ABI_INTERNAL
++
++////////////////////////////////////////////////////////////////////////////////
++// Types
++
++// typedef int MPI_Fint;
++
++typedef MPI_Status MPI_F08_Status;
++
++////////////////////////////////////////////////////////////////////////////////
++// Constants
++
++// Null, and deliberately not what fortran/mpi.h.patch defines these as; see the
++// same block in fortran/f2c_abi_mpich.c for why this file cannot name mpif's
++// sentinel symbols and what that costs.
++#define MPI_F_STATUS_IGNORE ((MPI_Fint *)MPI_STATUS_IGNORE)
++#define MPI_F_STATUSES_IGNORE ((MPI_Fint *)MPI_STATUSES_IGNORE)
++#define MPI_F08_STATUS_IGNORE ((MPI_F08_Status *)MPI_STATUS_IGNORE)
++#define MPI_F08_STATUSES_IGNORE ((MPI_F08_Status *)MPI_STATUSES_IGNORE)
++
++////////////////////////////////////////////////////////////////////////////////
++// Status functions
++
++#if OMPI_BUILD_MPI_PROFILING
++#if OPAL_HAVE_WEAK_ALIASES
++#pragma weak MPI_Status_f2c = PMPI_Status_f2c
++#pragma weak MPI_Status_c2f = PMPI_Status_c2f
++#pragma weak MPI_Status_f082c = PMPI_Status_f082c
++#pragma weak MPI_Status_c2f08 = PMPI_Status_c2f08
++#endif
++#define MPI_Status_f2c PMPI_Status_f2c
++#define MPI_Status_c2f PMPI_Status_c2f
++#define MPI_Status_f082c PMPI_Status_f082c
++#define MPI_Status_c2f08 PMPI_Status_c2f08
++#endif
++
++OMPI_DECLSPEC int MPI_Status_f2c(const MPI_Fint *f_status, MPI_Status *c_status);
++OMPI_DECLSPEC int MPI_Status_c2f(const MPI_Status *c_status, MPI_Fint *f_status);
++OMPI_DECLSPEC int MPI_Status_f082c(const MPI_F08_Status *f08_status, MPI_Status *c_status);
++OMPI_DECLSPEC int MPI_Status_c2f08(const MPI_Status *c_status, MPI_F08_Status *f08_status);
++
++// __attribute__((visibility("default")))
++int MPI_Status_f2c(const MPI_Fint *f_status, MPI_Status *c_status) {
++  if (f_status == MPI_F_STATUS_IGNORE || f_status == MPI_F_STATUSES_IGNORE ||
++      c_status == MPI_STATUS_IGNORE || c_status == MPI_STATUSES_IGNORE)
++    return MPI_ERR_ARG;
++  *c_status = *(const MPI_Status *)f_status;
++  return MPI_SUCCESS;
++}
++
++// __attribute__((visibility("default")))
++int MPI_Status_c2f(const MPI_Status *c_status, MPI_Fint *f_status) {
++  if (c_status == MPI_STATUS_IGNORE || c_status == MPI_STATUSES_IGNORE ||
++      f_status == MPI_F_STATUS_IGNORE || f_status == MPI_F_STATUSES_IGNORE)
++    return MPI_ERR_ARG;
++  *(MPI_Status *)f_status = *c_status;
++  return MPI_SUCCESS;
++}
++
++// __attribute__((visibility("default")))
++int MPI_Status_f082c(const MPI_F08_Status *f08_status, MPI_Status *c_status) {
++  if (f08_status == MPI_F08_STATUS_IGNORE ||
++      f08_status == MPI_F08_STATUSES_IGNORE || c_status == MPI_STATUS_IGNORE ||
++      c_status == MPI_STATUSES_IGNORE)
++    return MPI_ERR_ARG;
++  *c_status = *(const MPI_Status *)f08_status;
++  return MPI_SUCCESS;
++}
++
++// __attribute__((visibility("default")))
++int MPI_Status_c2f08(const MPI_Status *c_status, MPI_F08_Status *f08_status) {
++  if (c_status == MPI_STATUS_IGNORE || c_status == MPI_STATUSES_IGNORE ||
++      f08_status == MPI_F08_STATUS_IGNORE ||
++      f08_status == MPI_F08_STATUSES_IGNORE)
++    return MPI_ERR_ARG;
++  *(MPI_Status *)f08_status = *c_status;
++  return MPI_SUCCESS;
++}
++
++// Mach-O cannot express a weak *alias*. Where weak aliases are unavailable,
++// define the public MPI_* symbol here as a weak function forwarding to the
++// strong PMPI_* one (this is what Open MPI's own bindings do).
++#if OMPI_BUILD_MPI_PROFILING && !OPAL_HAVE_WEAK_ALIASES
++
++#undef MPI_Status_f2c
++#undef MPI_Status_c2f
++#undef MPI_Status_f082c
++#undef MPI_Status_c2f08
++
++OMPI_DECLSPEC __opal_attribute_weak__ int
++MPI_Status_f2c(const MPI_Fint *f_status, MPI_Status *c_status) {
++  return PMPI_Status_f2c(f_status, c_status);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ int
++MPI_Status_c2f(const MPI_Status *c_status, MPI_Fint *f_status) {
++  return PMPI_Status_c2f(c_status, f_status);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ int
++MPI_Status_f082c(const MPI_F08_Status *f08_status, MPI_Status *c_status) {
++  return PMPI_Status_f082c(f08_status, c_status);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ int
++MPI_Status_c2f08(const MPI_Status *c_status, MPI_F08_Status *f08_status) {
++  return PMPI_Status_c2f08(c_status, f08_status);
++}
++
++#endif
++
++////////////////////////////////////////////////////////////////////////////////
++// Handle functions
++
++#if OMPI_BUILD_MPI_PROFILING
++#if OPAL_HAVE_WEAK_ALIASES
++#pragma weak MPI_Comm_f2c = PMPI_Comm_f2c
++#pragma weak MPI_Comm_c2f = PMPI_Comm_c2f
++#pragma weak MPI_Errhandler_f2c = PMPI_Errhandler_f2c
++#pragma weak MPI_Errhandler_c2f = PMPI_Errhandler_c2f
++#pragma weak MPI_File_f2c = PMPI_File_f2c
++#pragma weak MPI_File_c2f = PMPI_File_c2f
++#pragma weak MPI_Group_f2c = PMPI_Group_f2c
++#pragma weak MPI_Group_c2f = PMPI_Group_c2f
++#pragma weak MPI_Info_f2c = PMPI_Info_f2c
++#pragma weak MPI_Info_c2f = PMPI_Info_c2f
++#pragma weak MPI_Message_f2c = PMPI_Message_f2c
++#pragma weak MPI_Message_c2f = PMPI_Message_c2f
++#pragma weak MPI_Op_f2c = PMPI_Op_f2c
++#pragma weak MPI_Op_c2f = PMPI_Op_c2f
++#pragma weak MPI_Request_f2c = PMPI_Request_f2c
++#pragma weak MPI_Request_c2f = PMPI_Request_c2f
++#pragma weak MPI_Session_f2c = PMPI_Session_f2c
++#pragma weak MPI_Session_c2f = PMPI_Session_c2f
++#pragma weak MPI_Type_f2c = PMPI_Type_f2c
++#pragma weak MPI_Type_c2f = PMPI_Type_c2f
++#pragma weak MPI_Win_f2c = PMPI_Win_f2c
++#pragma weak MPI_Win_c2f = PMPI_Win_c2f
++#endif
++#define MPI_Comm_f2c PMPI_Comm_f2c
++#define MPI_Comm_c2f PMPI_Comm_c2f
++#define MPI_Errhandler_f2c PMPI_Errhandler_f2c
++#define MPI_Errhandler_c2f PMPI_Errhandler_c2f
++#define MPI_File_f2c PMPI_File_f2c
++#define MPI_File_c2f PMPI_File_c2f
++#define MPI_Group_f2c PMPI_Group_f2c
++#define MPI_Group_c2f PMPI_Group_c2f
++#define MPI_Info_f2c PMPI_Info_f2c
++#define MPI_Info_c2f PMPI_Info_c2f
++#define MPI_Message_f2c PMPI_Message_f2c
++#define MPI_Message_c2f PMPI_Message_c2f
++#define MPI_Op_f2c PMPI_Op_f2c
++#define MPI_Op_c2f PMPI_Op_c2f
++#define MPI_Request_f2c PMPI_Request_f2c
++#define MPI_Request_c2f PMPI_Request_c2f
++#define MPI_Session_f2c PMPI_Session_f2c
++#define MPI_Session_c2f PMPI_Session_c2f
++#define MPI_Type_f2c PMPI_Type_f2c
++#define MPI_Type_c2f PMPI_Type_c2f
++#define MPI_Win_f2c PMPI_Win_f2c
++#define MPI_Win_c2f PMPI_Win_c2f
++#endif
++
++OMPI_DECLSPEC MPI_Comm MPI_Comm_f2c(MPI_Fint comm);
++OMPI_DECLSPEC MPI_Fint MPI_Comm_c2f(MPI_Comm comm);
++OMPI_DECLSPEC MPI_Errhandler MPI_Errhandler_f2c(MPI_Fint errhandler);
++OMPI_DECLSPEC MPI_Fint MPI_Errhandler_c2f(MPI_Errhandler errhandler);
++OMPI_DECLSPEC MPI_File MPI_File_f2c(MPI_Fint file);
++OMPI_DECLSPEC MPI_Fint MPI_File_c2f(MPI_File file);
++OMPI_DECLSPEC MPI_Group MPI_Group_f2c(MPI_Fint group);
++OMPI_DECLSPEC MPI_Fint MPI_Group_c2f(MPI_Group group);
++OMPI_DECLSPEC MPI_Info MPI_Info_f2c(MPI_Fint info);
++OMPI_DECLSPEC MPI_Fint MPI_Info_c2f(MPI_Info info);
++OMPI_DECLSPEC MPI_Message MPI_Message_f2c(MPI_Fint message);
++OMPI_DECLSPEC MPI_Fint MPI_Message_c2f(MPI_Message message);
++OMPI_DECLSPEC MPI_Op MPI_Op_f2c(MPI_Fint op);
++OMPI_DECLSPEC MPI_Fint MPI_Op_c2f(MPI_Op op);
++OMPI_DECLSPEC MPI_Request MPI_Request_f2c(MPI_Fint request);
++OMPI_DECLSPEC MPI_Fint MPI_Request_c2f(MPI_Request request);
++OMPI_DECLSPEC MPI_Session MPI_Session_f2c(MPI_Fint session);
++OMPI_DECLSPEC MPI_Fint MPI_Session_c2f(MPI_Session session);
++OMPI_DECLSPEC MPI_Datatype MPI_Type_f2c(MPI_Fint datatype);
++OMPI_DECLSPEC MPI_Fint MPI_Type_c2f(MPI_Datatype datatype);
++OMPI_DECLSPEC MPI_Win MPI_Win_f2c(MPI_Fint win);
++OMPI_DECLSPEC MPI_Fint MPI_Win_c2f(MPI_Win win);
++
++// __attribute__((visibility("default")))
++MPI_Comm MPI_Comm_f2c(MPI_Fint comm) { return MPI_Comm_fromint(comm); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Comm_c2f(MPI_Comm comm) { return MPI_Comm_toint(comm); }
++
++// __attribute__((visibility("default")))
++MPI_Errhandler MPI_Errhandler_f2c(MPI_Fint errhandler) {
++  return MPI_Errhandler_fromint(errhandler);
++}
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Errhandler_c2f(MPI_Errhandler errhandler) {
++  return MPI_Errhandler_toint(errhandler);
++}
++
++// __attribute__((visibility("default")))
++MPI_File MPI_File_f2c(MPI_Fint file) { return MPI_File_fromint(file); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_File_c2f(MPI_File file) { return MPI_File_toint(file); }
++
++// __attribute__((visibility("default")))
++MPI_Group MPI_Group_f2c(MPI_Fint group) { return MPI_Group_fromint(group); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Group_c2f(MPI_Group group) { return MPI_Group_toint(group); }
++
++// __attribute__((visibility("default")))
++MPI_Info MPI_Info_f2c(MPI_Fint info) { return MPI_Info_fromint(info); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Info_c2f(MPI_Info info) { return MPI_Info_toint(info); }
++
++// __attribute__((visibility("default")))
++MPI_Message MPI_Message_f2c(MPI_Fint message) {
++  return MPI_Message_fromint(message);
++}
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Message_c2f(MPI_Message message) {
++  return MPI_Message_toint(message);
++}
++
++// __attribute__((visibility("default")))
++MPI_Op MPI_Op_f2c(MPI_Fint op) { return MPI_Op_fromint(op); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Op_c2f(MPI_Op op) { return MPI_Op_toint(op); }
++
++// __attribute__((visibility("default")))
++MPI_Request MPI_Request_f2c(MPI_Fint request) {
++  return MPI_Request_fromint(request);
++}
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Request_c2f(MPI_Request request) {
++  return MPI_Request_toint(request);
++}
++
++// __attribute__((visibility("default")))
++MPI_Session MPI_Session_f2c(MPI_Fint session) {
++  return MPI_Session_fromint(session);
++}
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Session_c2f(MPI_Session session) {
++  return MPI_Session_toint(session);
++}
++
++// __attribute__((visibility("default")))
++MPI_Datatype MPI_Type_f2c(MPI_Fint datatype) {
++  return MPI_Type_fromint(datatype);
++}
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Type_c2f(MPI_Datatype datatype) {
++  return MPI_Type_toint(datatype);
++}
++
++// __attribute__((visibility("default")))
++MPI_Win MPI_Win_f2c(MPI_Fint win) { return MPI_Win_fromint(win); }
++
++// __attribute__((visibility("default")))
++MPI_Fint MPI_Win_c2f(MPI_Win win) { return MPI_Win_toint(win); }
++
++#if OMPI_BUILD_MPI_PROFILING && !OPAL_HAVE_WEAK_ALIASES
++
++#undef MPI_Comm_f2c
++#undef MPI_Comm_c2f
++#undef MPI_Errhandler_f2c
++#undef MPI_Errhandler_c2f
++#undef MPI_File_f2c
++#undef MPI_File_c2f
++#undef MPI_Group_f2c
++#undef MPI_Group_c2f
++#undef MPI_Info_f2c
++#undef MPI_Info_c2f
++#undef MPI_Message_f2c
++#undef MPI_Message_c2f
++#undef MPI_Op_f2c
++#undef MPI_Op_c2f
++#undef MPI_Request_f2c
++#undef MPI_Request_c2f
++#undef MPI_Session_f2c
++#undef MPI_Session_c2f
++#undef MPI_Type_f2c
++#undef MPI_Type_c2f
++#undef MPI_Win_f2c
++#undef MPI_Win_c2f
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Comm MPI_Comm_f2c(MPI_Fint comm) {
++  return PMPI_Comm_f2c(comm);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_Comm_c2f(MPI_Comm comm) {
++  return PMPI_Comm_c2f(comm);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Errhandler
++MPI_Errhandler_f2c(MPI_Fint errhandler) {
++  return PMPI_Errhandler_f2c(errhandler);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint
++MPI_Errhandler_c2f(MPI_Errhandler errhandler) {
++  return PMPI_Errhandler_c2f(errhandler);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_File MPI_File_f2c(MPI_Fint file) {
++  return PMPI_File_f2c(file);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_File_c2f(MPI_File file) {
++  return PMPI_File_c2f(file);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Group MPI_Group_f2c(MPI_Fint group) {
++  return PMPI_Group_f2c(group);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_Group_c2f(MPI_Group group) {
++  return PMPI_Group_c2f(group);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Info MPI_Info_f2c(MPI_Fint info) {
++  return PMPI_Info_f2c(info);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_Info_c2f(MPI_Info info) {
++  return PMPI_Info_c2f(info);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Message
++MPI_Message_f2c(MPI_Fint message) {
++  return PMPI_Message_f2c(message);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint
++MPI_Message_c2f(MPI_Message message) {
++  return PMPI_Message_c2f(message);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Op MPI_Op_f2c(MPI_Fint op) {
++  return PMPI_Op_f2c(op);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_Op_c2f(MPI_Op op) {
++  return PMPI_Op_c2f(op);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Request
++MPI_Request_f2c(MPI_Fint request) {
++  return PMPI_Request_f2c(request);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint
++MPI_Request_c2f(MPI_Request request) {
++  return PMPI_Request_c2f(request);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Session
++MPI_Session_f2c(MPI_Fint session) {
++  return PMPI_Session_f2c(session);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint
++MPI_Session_c2f(MPI_Session session) {
++  return PMPI_Session_c2f(session);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Datatype
++MPI_Type_f2c(MPI_Fint datatype) {
++  return PMPI_Type_f2c(datatype);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint
++MPI_Type_c2f(MPI_Datatype datatype) {
++  return PMPI_Type_c2f(datatype);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Win MPI_Win_f2c(MPI_Fint win) {
++  return PMPI_Win_f2c(win);
++}
++
++OMPI_DECLSPEC __opal_attribute_weak__ MPI_Fint MPI_Win_c2f(MPI_Win win) {
++  return PMPI_Win_c2f(win);
++}
++
++#endif

@@ -10,13 +10,13 @@ A trampoline generator for the MPI 5.0 ABI which generates an MPI 5.0 ABI
 library that can be overridden by the environment variable TRAMPI_ABI_LIBRARY.
 """
 
-toolchain = {'name': 'GCC', 'version': '14.3.0'}
+toolchain = {'name': 'GCC', 'version': '15.2.0'}
 
 builddependencies = [
-    ('CMake', '3.31.8'),
-    ('Python', '3.13.5'),
+    ('CMake', '4.2.1'),
+    ('Python', '3.14.2'),
     # Allows us to provide a default MPI backend (requires that MPICH was built with RPATH)
-    ('MPICH', '5.0.1', '-mpif'),
+    ('MPICH', '5.0.2', '-dev-mpif'),
 ]
 
 default_easyblock = 'CMakeMake'

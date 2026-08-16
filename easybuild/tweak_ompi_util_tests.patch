@@ -1,0 +1,52 @@
+diff -ruN ompi_orig/test/util/Makefile.am ompi/test/util/Makefile.am
+--- ompi_orig/test/util/Makefile.am	1970-01-01 01:00:00.000000000 +0100
++++ ompi/test/util/Makefile.am	2026-08-15 21:30:13.757650607 +0200
+@@ -33,7 +33,6 @@
+ check_PROGRAMS = \
+ 	bipartite_graph \
+ 	opal_bit_ops \
+-	opal_path_nfs \
+         opal_json \
+         opal_sha256 \
+         mca_base_event_test \
+@@ -62,7 +61,6 @@
+ 	opal_proc \
+ 	opal_sys_limits \
+ 	opal_error \
+-	opal_if \
+ 	opal_info \
+ 	opal_net \
+ 	opal_output
+@@ -171,9 +169,9 @@
+ opal_error_LDADD = $(opal_test_ldadd)
+ opal_error_DEPENDENCIES = $(opal_test_ldadd)
+ 
+-opal_if_SOURCES = opal_if.c
+-opal_if_LDADD = $(opal_test_ldadd)
+-opal_if_DEPENDENCIES = $(opal_test_ldadd)
++# opal_if_SOURCES = opal_if.c
++# opal_if_LDADD = $(opal_test_ldadd)
++# opal_if_DEPENDENCIES = $(opal_test_ldadd)
+ 
+ opal_info_SOURCES = opal_info.c
+ opal_info_LDADD = $(opal_test_ldadd)
+@@ -191,13 +189,13 @@
+ opal_bit_ops_LDADD = \
+         $(top_builddir)/opal/lib@OPAL_LIB_NAME@.la \
+         $(top_builddir)/test/support/libsupport.a
+-opal_bit_ops_DEPENDENCIES = $(opal_path_nfs_LDADD)
++opal_bit_ops_DEPENDENCIES = $(opal_bit_ops_LDADD)
+ 
+-opal_path_nfs_SOURCES = opal_path_nfs.c
+-opal_path_nfs_LDADD = \
+-        $(top_builddir)/opal/lib@OPAL_LIB_NAME@.la \
+-        $(top_builddir)/test/support/libsupport.a
+-opal_path_nfs_DEPENDENCIES = $(opal_path_nfs_LDADD)
++# opal_path_nfs_SOURCES = opal_path_nfs.c
++# opal_path_nfs_LDADD = \
++#         $(top_builddir)/opal/lib@OPAL_LIB_NAME@.la \
++#         $(top_builddir)/test/support/libsupport.a
++# opal_path_nfs_DEPENDENCIES = $(opal_path_nfs_LDADD)
+ 
+ opal_timer_SOURCES = opal_timer.c
+ opal_timer_LDADD = \

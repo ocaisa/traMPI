@@ -1,0 +1,520 @@
+Stop the posix fbtl losing a nonblocking write when the aio queue fills
+
+Not an upstream backport, like the MPICH patches beside it are in part: a local fix
+carried ahead of upstream. It is reported -- open-mpi/ompi#14278 for the defect and
+open-mpi/ompi#14279 for this patch, three commits against `main`, whose source is
+identical to what is below. Every file touched is byte-identical between `main` and
+the ABI-branch commit install-openmpi.sh pins, which is why one patch serves both.
+Drop this file once the PR lands and the pinned commit carries it; until then
+whichever way review reshapes it, reshape this too rather than letting the two
+drift. It is also what removed the `openmpi/*/darwin/*/*  f08  i_fcoll_test` line
+from suite/mpich-suite-xfail.txt. MISSING.md, "OpenMPI on macOS: a nonblocking
+collective write is lost when the aio queue fills", has the measurements; this is
+the short version and the reasoning behind each hunk.
+
+`f08/io/i_fcoll_test` writes a 32³ integer array through an `MPI_Type_create_darray`
+view with `MPI_File_iwrite_all`, reads it back with `MPI_File_iread_all`, and finds
+every element zero, after
+
+    mca_fbtl_posix_ipwritev: error in aio_write():  Resource temporarily unavailable
+    mca_fbtl_posix_ipreadv: error in aio_read(): errno 35 Resource temporarily unavailable
+
+once per process. `MPI_File_iwrite_all` returns `MPI_SUCCESS` and so does
+`MPI_Wait`.
+
+**Where the number comes from.** `mca_fbtl_posix_module_init` sizes
+`ompi_fbtl_posix_max_prd_active_reqs` -- how many `aio_write`s to keep in flight
+at once -- from `sysconf(_SC_AIO_MAX)`. On Darwin that reports `kern.aiomax`, the
+limit across every process on the machine, 90 by default; a single process is held
+to `kern.aioprocmax`, 16. So the batch is 5.6x what the process is allowed, and
+the seventeenth `aio_write` of the first batch returns EAGAIN. The patch reads the
+per-process sysctl on Darwin, and adds an `fbtl_posix_max_aio_reqs` MCA parameter
+so the value is reachable at all: today nothing but `sysconf` ever assigns it, so
+an environment where the system's answer is wrong has no recourse.
+
+**Why the retry cannot retry.** `fbtl_posix_ipwritev` already tries ten times per
+request with `mca_common_ompio_progress()` in between, which is the fix for
+open-mpi/ompi#8368, "Exceeding the max. number of pending aio requests on MacOS",
+closed in the 4.1 series. It cannot help. A slot is released by `aio_return`, not
+by the operation completing -- sixteen requests that have all finished still refuse
+a seventeenth, and accept it the moment they are reaped -- and the only caller of
+`aio_return` is `mca_fbtl_posix_progress`, which `mca_common_ompio_progress` reaches
+through `req->req_progress_fn`, assigned *after* the loop. Nothing in the process
+can reap this request's own operations while the loop runs.
+
+So the retry is replaced by back-pressure. `mca_fbtl_posix_post_reqs` posts what
+the queue will take and reports where it stopped; the active window becomes what
+was accepted rather than what was wanted, and the remainder waits for a later
+progress call. That needs one change in `mca_fbtl_posix_progress`: the next batch
+goes out when every request in the active window is accounted for, `lcount ==
+prd_last_active_req - prd_first_active_req`, rather than when a whole
+`prd_req_chunks` of them are. The old test assumed every window is a full chunk,
+which is exactly what a short window is not; comparing against the width of the
+window handles a short one, and an empty one -- left when the queue would take
+none at all -- reduces to the same expression and retries on the next call.
+
+**Why the loss was silent.** Two things, both fixed here:
+
+- `mca_common_ompio_file_iwrite` and `..._iread` call the fbtl as a statement and
+  never look at what it returns. A request whose fbtl call failed carries no
+  progress function, and `mca_common_ompio_progress` cannot tell that from a
+  parent request with no subrequests left outstanding, so it completes the request
+  with a status nobody has written: `MPI_Wait` reports `MPI_SUCCESS` and
+  `MPI_Get_count` reports 0. These two now set `MPI_ERR_IO` and complete the
+  request themselves. Note `MPI_File_iwrite_all` is where this is reached from --
+  no fcoll component implements `fcoll_file_iwrite_all`, so
+  `mca_common_ompio_file_iwrite_all` falls back to its own "WE fake it with
+  individual non-blocking I/O operations" branch, and the io array is as
+  fragmented as the file view.
+- The error paths freed `prd_aio.aio_reqs` with operations still outstanding
+  against those control blocks, and reaped none of them. POSIX requires an aiocb
+  to stay valid until its operation completes, and an unreaped request costs the
+  process a queue slot for the rest of its life -- so one EAGAIN disabled
+  nonblocking file I/O for the process entirely, which is why the test read back
+  nothing rather than the sixteen blocks the write had left behind.
+  `mca_fbtl_posix_drain_reqs` waits for and reaps whatever was posted before the
+  control blocks go away.
+
+Not touched, deliberately: the two `fbtl_ipwritev`/`fbtl_ipreadv` calls in the
+*blocking* write and read paths discard their return value the same way, and the
+partial-completion re-post inside `mca_fbtl_posix_progress` still gives up on a
+failed `aio_write` with the request marked EINPROGRESS and nothing in flight. Both
+are reachable only from a genuine I/O error rather than from a full queue, neither
+is what this defect is, and the second needs the lock dance rethought. They are in
+MISSING.md as known and unfixed.
+
+Measured on this repository's macOS 26 / arm64, `kern.aioprocmax` 16, against
+Open MPI 6.1.0a1 at the ABI branch commit the installer pins. `f08/io`, `f90/io`
+and `f77/io` all go from three failures to two, the one that goes being
+`i_fcoll_test`; the two that remain, `c2f2ciof90` and `c2f90multio` and their f77
+names, fail identically with and without this patch. Putting the bug back --
+reverting, rebuilding, rerunning -- makes both reproducers in
+bug-ompi-aio-eagain/ fail again with the original message, which is what earns the
+claim. The corresponding openmpi/*/darwin/15/* variants are inferred rather than
+measured: `kern.aioprocmax` is 16 there too, and nothing in the fix is
+version-specific, but no macOS 15 machine was available to run it on.
+
+diff --git a/ompi/mca/common/ompio/common_ompio_file_read.c b/ompi/mca/common/ompio/common_ompio_file_read.c
+index 7dd180d..2127cd0 100644
+--- a/ompi/mca/common/ompio/common_ompio_file_read.c
++++ b/ompi/mca/common/ompio/common_ompio_file_read.c
+@@ -509,7 +509,15 @@ int mca_common_ompio_file_iread (ompio_file_t *fh,
+                                              &tbr, &spc,
+                                              &fh->f_io_array, &fh->f_num_of_io_entries);
+ 
+-            fh->f_fbtl->fbtl_ipreadv (fh, (ompi_request_t *) ompio_req);
++            if (OMPI_SUCCESS != fh->f_fbtl->fbtl_ipreadv (fh, (ompi_request_t *) ompio_req)) {
++                /* See the same place in common_ompio_file_write.c: without this
++                 * the failure is indistinguishable from a completed request and
++                 * MPI_Wait reports MPI_SUCCESS for a read that never happened.
++                 */
++                ompio_req->req_ompi.req_status.MPI_ERROR = MPI_ERR_IO;
++                ompio_req->req_ompi.req_status._ucount = 0;
++                ompi_request_complete (&ompio_req->req_ompi, false);
++            }
+         }
+     }
+     else {
+diff --git a/ompi/mca/common/ompio/common_ompio_file_write.c b/ompi/mca/common/ompio/common_ompio_file_write.c
+index 7db6071..db19971 100644
+--- a/ompi/mca/common/ompio/common_ompio_file_write.c
++++ b/ompi/mca/common/ompio/common_ompio_file_write.c
+@@ -453,7 +453,17 @@ int mca_common_ompio_file_iwrite (ompio_file_t *fh,
+ 					     &i, &total_bytes_written, &spc,
+ 					     &fh->f_io_array, &fh->f_num_of_io_entries);
+ 
+-            fh->f_fbtl->fbtl_ipwritev (fh, (ompi_request_t *) ompio_req);
++            if (OMPI_SUCCESS != fh->f_fbtl->fbtl_ipwritev (fh, (ompi_request_t *) ompio_req)) {
++                /* The fbtl could not post the operation. Without this the
++                 * request carries no progress function, which the progress loop
++                 * cannot tell from a parent request with no subrequests left, so
++                 * it completes it with an untouched status: MPI_Wait then reports
++                 * MPI_SUCCESS for a write that never happened.
++                 */
++                ompio_req->req_ompi.req_status.MPI_ERROR = MPI_ERR_IO;
++                ompio_req->req_ompi.req_status._ucount = 0;
++                ompi_request_complete (&ompio_req->req_ompi, false);
++            }
+         }
+     } else {
+         // This fbtl does not support non-blocking write operations
+diff --git a/ompi/mca/fbtl/posix/fbtl_posix.c b/ompi/mca/fbtl/posix/fbtl_posix.c
+index 111bcff..ec5f48b 100644
+--- a/ompi/mca/fbtl/posix/fbtl_posix.c
++++ b/ompi/mca/fbtl/posix/fbtl_posix.c
+@@ -30,8 +30,13 @@
+ #include "ompi_config.h"
+ #include "mpi.h"
+ 
++#include <errno.h>
++#include <string.h>
+ #include <unistd.h>
+ #include <sys/uio.h>
++#if defined(__APPLE__)
++#include <sys/sysctl.h>
++#endif
+ #if HAVE_AIO_H
+ #include <aio.h>
+ #endif
+@@ -104,14 +109,99 @@ int mca_fbtl_posix_component_file_unquery (ompio_file_t *file) {
+ int mca_fbtl_posix_module_init (ompio_file_t *file) {
+ 
+ #if defined (FBTL_POSIX_HAVE_AIO)
+-    long val = sysconf(_SC_AIO_MAX);
+-    if ( -1 != val ) {
+-        ompi_fbtl_posix_max_prd_active_reqs = (int)val;
++    /* An explicit fbtl_posix_max_aio_reqs wins; otherwise ask the system.
++     * The number wanted is what *one process* may have outstanding, and
++     * sysconf(_SC_AIO_MAX) is not always that: on Darwin it reports
++     * kern.aiomax, the limit across all processes on the machine (90 by
++     * default), where a single process is held to kern.aioprocmax (16). Sizing
++     * a batch of concurrent aio_write() calls from the former overruns the
++     * latter by 5x on a stock machine, so read the per-process sysctl there.
++     */
++    if ( 0 >= mca_fbtl_posix_max_aio_reqs ) {
++        long val = -1;
++#if defined(__APPLE__)
++        int procmax = 0;
++        size_t procmax_len = sizeof(procmax);
++        if ( 0 == sysctlbyname("kern.aioprocmax", &procmax, &procmax_len, NULL, 0) ) {
++            val = (long)procmax;
++        }
++#endif
++        if ( -1 == val ) {
++            val = sysconf(_SC_AIO_MAX);
++        }
++        if ( -1 != val && 0 < val ) {
++            ompi_fbtl_posix_max_prd_active_reqs = (int)val;
++        }
++    }
++    else {
++        ompi_fbtl_posix_max_prd_active_reqs = mca_fbtl_posix_max_aio_reqs;
+     }
+ #endif
+     return OMPI_SUCCESS;
+ }
+ 
++#if defined (FBTL_POSIX_HAVE_AIO)
++/* Hand requests [first, last) to the kernel. *posted comes back as one past the
++ * last request accepted, so that the caller can make it prd_last_active_req; it
++ * is set whether this returns success or not, since the caller has to know what
++ * is in flight either way.
++ *
++ * EAGAIN is not a failure. It means this process already has as many aio
++ * operations outstanding as it is allowed, which is transient -- a slot comes
++ * back when a request is aio_return()ed -- so the requests that did not fit are
++ * simply left for a later call, and *posted says where to resume. Retrying here
++ * cannot work: nothing in this process reaps anything until the request this
++ * batch belongs to is registered with mca_common_ompio_progress, which happens
++ * only once the caller returns.
++ */
++int mca_fbtl_posix_post_reqs ( mca_fbtl_posix_request_data_t *data,
++                               int first, int last, int *posted )
++{
++    int i, ret = OMPI_SUCCESS;
++
++    for ( i = first; i < last; i++ ) {
++        int rc;
++        if ( FBTL_POSIX_AIO_WRITE == data->prd_req_type ) {
++            rc = aio_write ( &data->prd_aio.aio_reqs[i] );
++        }
++        else {
++            rc = aio_read ( &data->prd_aio.aio_reqs[i] );
++        }
++        if ( -1 == rc ) {
++            if ( EAGAIN != errno ) {
++                opal_output(1, "mca_fbtl_posix_post_reqs: error in aio_%s(): errno %d %s",
++                            FBTL_POSIX_AIO_WRITE == data->prd_req_type ? "write" : "read",
++                            errno, strerror(errno));
++                ret = OMPI_ERROR;
++            }
++            break;
++        }
++    }
++
++    *posted = i;
++    return ret;
++}
++
++/* Wait for the requests in [first, last) and reap them. Every aio operation
++ * that has been posted has to be aio_return()ed even once it has completed,
++ * because that is what releases its slot in the queue -- an abandoned request
++ * costs the process a slot for the rest of its life. Used on the error paths,
++ * which would otherwise free the aiocbs from under the kernel as well.
++ */
++void mca_fbtl_posix_drain_reqs ( mca_fbtl_posix_request_data_t *data,
++                                 int first, int last )
++{
++    int i;
++
++    for ( i = first; i < last; i++ ) {
++        while ( EINPROGRESS == aio_error ( &data->prd_aio.aio_reqs[i] ) ) {
++            mca_common_ompio_progress();
++        }
++        (void) aio_return ( &data->prd_aio.aio_reqs[i] );
++    }
++}
++#endif
++
+ 
+ int mca_fbtl_posix_module_finalize (ompio_file_t *file) {
+     return OMPI_SUCCESS;
+@@ -205,22 +295,39 @@ bool mca_fbtl_posix_progress ( mca_ompio_request_t *req)
+ #if 0
+     printf("lcount=%d open_reqs=%d\n", lcount, data->prd_open_reqs );
+ #endif
+-    if ( (lcount == data->prd_req_chunks) && (0 != data->prd_open_reqs )) {
++    /* Every request in the active window is accounted for. If any remain
++     * unfinished, the next batch goes out -- which includes the case of an empty
++     * window, left behind when the process's aio queue was full and would take
++     * none of the previous batch. Comparing lcount against the width of the
++     * window rather than against prd_req_chunks is what lets that work: a window
++     * is only as wide as the queue allowed, which need not be a whole chunk.
++     */
++    if ( (lcount == (data->prd_last_active_req - data->prd_first_active_req)) &&
++         (0 != data->prd_open_reqs )) {
++        int want, posted;
++
+         /* release the lock of the previous operations */
+         mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter );
+-        
++
+         /* post the next batch of operations */
+         data->prd_first_active_req = data->prd_last_active_req;
+-        if ( (data->prd_req_count-data->prd_last_active_req) > data->prd_req_chunks ) {
+-            data->prd_last_active_req += data->prd_req_chunks;
++        if ( (data->prd_req_count-data->prd_first_active_req) > data->prd_req_chunks ) {
++            want = data->prd_first_active_req + data->prd_req_chunks;
+         }
+         else {
+-            data->prd_last_active_req = data->prd_req_count;
++            want = data->prd_req_count;
++        }
++        if ( want <= data->prd_first_active_req ) {
++            /* Requests are outstanding but none are left to post, which should
++             * not happen. Leave the request alone rather than index outside the
++             * array below.
++             */
++            return ret;
+         }
+ 
+         start_offset = data->prd_aio.aio_reqs[data->prd_first_active_req].aio_offset;
+-        end_offset   = data->prd_aio.aio_reqs[data->prd_last_active_req-1].aio_offset +
+-                       data->prd_aio.aio_reqs[data->prd_last_active_req-1].aio_nbytes;
++        end_offset   = data->prd_aio.aio_reqs[want-1].aio_offset +
++                       data->prd_aio.aio_reqs[want-1].aio_nbytes;
+         total_length = (end_offset - start_offset);
+ 
+         if ( FBTL_POSIX_AIO_READ == data->prd_req_type ) {
+@@ -238,22 +345,26 @@ bool mca_fbtl_posix_progress ( mca_ompio_request_t *req)
+             return false;
+         }
+         
+-        for ( i=data->prd_first_active_req; i< data->prd_last_active_req; i++ ) {
+-            if ( FBTL_POSIX_AIO_READ == data->prd_req_type ) {
+-                if (-1 == aio_read(&data->prd_aio.aio_reqs[i])) {
+-                    opal_output(1, "mca_fbtl_posix_progress: error in aio_read()");
+-                    mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter );
+-                    return false;
+-                }
+-            }
+-            else if ( FBTL_POSIX_AIO_WRITE == data->prd_req_type ) {
+-                if (-1 == aio_write(&data->prd_aio.aio_reqs[i])) {
+-                    opal_output(1, "mca_fbtl_posix_progress: error in aio_write()");
+-                    mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter );
+-                    return false;
+-                }
+-            }
++        if ( OMPI_SUCCESS != mca_fbtl_posix_post_reqs ( data, data->prd_first_active_req,
++                                                        want, &posted ) ) {
++            /* A real error rather than a full queue. Reap the part of the batch
++             * that did go out, then complete the request with an error instead
++             * of leaving the caller waiting on operations that will never be
++             * posted.
++             */
++            mca_fbtl_posix_drain_reqs ( data, data->prd_first_active_req, posted );
++            mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter );
++            data->prd_last_active_req = data->prd_first_active_req;
++            data->prd_open_reqs = 0;
++            req->req_ompi.req_status.MPI_ERROR = OMPI_ERROR;
++            req->req_ompi.req_status._ucount = data->prd_total_len;
++            return true;
+         }
++        /* posted may fall short of want, the queue being full; the remainder
++         * waits for the next call, which finds a short or empty window and comes
++         * back here.
++         */
++        data->prd_last_active_req = posted;
+ #if 0
+         printf("posting new batch: first=%d last=%d\n", data->prd_first_active_req, data->prd_last_active_req );
+ #endif
+diff --git a/ompi/mca/fbtl/posix/fbtl_posix.h b/ompi/mca/fbtl/posix/fbtl_posix.h
+index 3eae2da..de4a07a 100644
+--- a/ompi/mca/fbtl/posix/fbtl_posix.h
++++ b/ompi/mca/fbtl/posix/fbtl_posix.h
+@@ -35,6 +35,7 @@ extern bool mca_fbtl_posix_write_datasieving;
+ extern size_t mca_fbtl_posix_max_block_size;
+ extern size_t mca_fbtl_posix_max_gap_size;
+ extern size_t mca_fbtl_posix_max_tmpbuf_size;
++extern int mca_fbtl_posix_max_aio_reqs;
+ 
+ BEGIN_C_DECLS
+ 
+@@ -67,6 +68,12 @@ bool mca_fbtl_posix_progress     ( mca_ompio_request_t *req);
+ void mca_fbtl_posix_request_free ( mca_ompio_request_t *req);
+ bool mca_fbtl_posix_check_atomicity ( ompio_file_t *file);
+ 
++struct mca_fbtl_posix_request_data_t;
++int mca_fbtl_posix_post_reqs ( struct mca_fbtl_posix_request_data_t *data,
++                               int first, int last, int *posted );
++void mca_fbtl_posix_drain_reqs ( struct mca_fbtl_posix_request_data_t *data,
++                                 int first, int last );
++
+ int mca_fbtl_posix_lock ( struct flock *lock, ompio_file_t *fh, int op, 
+                           OMPI_MPI_OFFSET_TYPE iov_offset, off_t len, int flags,
+                           int *lock_counter);
+diff --git a/ompi/mca/fbtl/posix/fbtl_posix_component.c b/ompi/mca/fbtl/posix/fbtl_posix_component.c
+index 620d3e7..4a172d7 100644
+--- a/ompi/mca/fbtl/posix/fbtl_posix_component.c
++++ b/ompi/mca/fbtl/posix/fbtl_posix_component.c
+@@ -42,6 +42,7 @@ bool mca_fbtl_posix_write_datasieving = true;
+ size_t mca_fbtl_posix_max_block_size  = 1048576;  // 1MB
+ size_t mca_fbtl_posix_max_gap_size    = 4096;     // Size of a block in many linux fs
+ size_t mca_fbtl_posix_max_tmpbuf_size = 67108864; // 64 MB
++int mca_fbtl_posix_max_aio_reqs       = 0;        // 0: ask the system
+ /*
+  * Private functions
+  */
+@@ -130,6 +131,16 @@ static int register_component(void)
+                                            MCA_BASE_VAR_SCOPE_READONLY,
+                                            &mca_fbtl_posix_write_datasieving );
+ 
+-    
++    mca_fbtl_posix_max_aio_reqs = 0;
++    (void) mca_base_component_var_register(&mca_fbtl_posix_component.fbtlm_version,
++                                           "max_aio_reqs", "Maximum number of asynchronous I/O operations to keep outstanding "
++                                           "per process. Default: 0, meaning ask the operating system what it allows one "
++                                           "process to have outstanding.",
++                                           MCA_BASE_VAR_TYPE_INT, NULL, 0, 0,
++                                           OPAL_INFO_LVL_9,
++                                           MCA_BASE_VAR_SCOPE_READONLY,
++                                           &mca_fbtl_posix_max_aio_reqs );
++
++
+     return OMPI_SUCCESS;
+ }
+diff --git a/ompi/mca/fbtl/posix/fbtl_posix_ipreadv.c b/ompi/mca/fbtl/posix/fbtl_posix_ipreadv.c
+index 3a31d33..5017015 100644
+--- a/ompi/mca/fbtl/posix/fbtl_posix_ipreadv.c
++++ b/ompi/mca/fbtl/posix/fbtl_posix_ipreadv.c
+@@ -34,8 +34,6 @@
+ #include "ompi/constants.h"
+ #include "ompi/mca/fbtl/fbtl.h"
+ 
+-#define MAX_ATTEMPTS 10
+-
+ ssize_t mca_fbtl_posix_ipreadv (ompio_file_t *fh,
+                                ompi_request_t *request)
+ {
+@@ -112,24 +110,24 @@ ssize_t mca_fbtl_posix_ipreadv (ompio_file_t *fh,
+         return OMPI_ERROR;
+     }
+ 
+-    for (i=0; i < data->prd_last_active_req; i++) {
+-        int counter=0;
+-        while ( MAX_ATTEMPTS > counter ) { 
+-            if  ( -1 != aio_read(&data->prd_aio.aio_reqs[i]) ) {
+-                break;
+-            }
+-            counter++;
+-            mca_common_ompio_progress();
+-        }
+-        if ( MAX_ATTEMPTS == counter ) {
+-           opal_output(1, "mca_fbtl_posix_ipreadv: error in aio_read(): errno %d %s", errno, strerror(errno));
+-           mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter);
+-           free(data->prd_aio.aio_reqs);
+-           free(data->prd_aio.aio_req_status);
+-           free(data);
+-           return OMPI_ERROR;
+-        }
++    ret = mca_fbtl_posix_post_reqs ( data, data->prd_first_active_req,
++                                     data->prd_last_active_req, &i );
++    if ( OMPI_SUCCESS != ret ) {
++       opal_output(1, "mca_fbtl_posix_ipreadv: error in aio_read(): errno %d %s", errno, strerror(errno));
++       /* Reap what did get posted; see the same place in
++        * fbtl_posix_ipwritev.c for why this cannot be skipped.
++        */
++       mca_fbtl_posix_drain_reqs ( data, data->prd_first_active_req, i );
++       mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter);
++       free(data->prd_aio.aio_reqs);
++       free(data->prd_aio.aio_req_status);
++       free(data);
++       return OMPI_ERROR;
+     }
++    /* Whatever the queue would not take stays for mca_fbtl_posix_progress; see
++     * fbtl_posix_ipwritev.c.
++     */
++    data->prd_last_active_req = i;
+ 
+     req->req_data = data;
+     req->req_progress_fn = mca_fbtl_posix_progress;
+diff --git a/ompi/mca/fbtl/posix/fbtl_posix_ipwritev.c b/ompi/mca/fbtl/posix/fbtl_posix_ipwritev.c
+index 272c717..4cf7f58 100644
+--- a/ompi/mca/fbtl/posix/fbtl_posix_ipwritev.c
++++ b/ompi/mca/fbtl/posix/fbtl_posix_ipwritev.c
+@@ -33,8 +33,6 @@
+ #include "ompi/constants.h"
+ #include "ompi/mca/fbtl/fbtl.h"
+ 
+-#define MAX_ATTEMPTS 10
+-
+ ssize_t  mca_fbtl_posix_ipwritev (ompio_file_t *fh,
+                                  ompi_request_t *request)
+ {
+@@ -110,24 +108,29 @@ ssize_t  mca_fbtl_posix_ipwritev (ompio_file_t *fh,
+         return OMPI_ERROR;
+     }
+ 
+-    for (i=0; i < data->prd_last_active_req; i++) {
+-        int counter=0;
+-        while ( MAX_ATTEMPTS > counter ) {
+-            if (-1 != aio_write(&data->prd_aio.aio_reqs[i])) {
+-                break;
+-            }
+-            counter++;
+-            mca_common_ompio_progress();
+-        }
+-        if ( MAX_ATTEMPTS == counter ) {
+-            opal_output(1, "mca_fbtl_posix_ipwritev: error in aio_write():  %s", strerror(errno));
+-            mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter);
+-            free(data->prd_aio.aio_req_status);
+-            free(data->prd_aio.aio_reqs);
+-            free(data);
+-            return OMPI_ERROR;
+-        }
++    ret = mca_fbtl_posix_post_reqs ( data, data->prd_first_active_req,
++                                     data->prd_last_active_req, &i );
++    if ( OMPI_SUCCESS != ret ) {
++        opal_output(1, "mca_fbtl_posix_ipwritev: error in aio_write():  %s", strerror(errno));
++        /* Reap what did get posted. Freeing the aiocbs with operations still
++         * outstanding against them would leave the kernel writing into memory
++         * this request no longer owns, and would cost the process a queue slot
++         * per abandoned request for the rest of its life.
++         */
++        mca_fbtl_posix_drain_reqs ( data, data->prd_first_active_req, i );
++        mca_fbtl_posix_unlock ( &data->prd_lock, data->prd_fh, &data->prd_lock_counter);
++        free(data->prd_aio.aio_req_status);
++        free(data->prd_aio.aio_reqs);
++        free(data);
++        return OMPI_ERROR;
+     }
++    /* The process's aio queue may have been full before the whole batch was
++     * posted. Whatever did not fit stays for mca_fbtl_posix_progress to post
++     * once a slot frees up, so the active window is what was accepted rather
++     * than what was wanted. Nothing is lost and nothing is reported: this is
++     * ordinary back-pressure, not a failure.
++     */
++    data->prd_last_active_req = i;
+ 
+     req->req_data = data;
+     req->req_progress_fn = mca_fbtl_posix_progress;
