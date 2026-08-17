@@ -150,7 +150,8 @@ jobs:
         export TRAMPI_ABI_LIBRARY="$EBROOTOPENMPI/lib/libmpi_abi.so"
         echo "Exporting TRAMPI_ABI_LIBRARY_MPIEXEC=$EBROOTOPENMPI/bin/mpiexec"
         export TRAMPI_ABI_LIBRARY_MPIEXEC="$EBROOTOPENMPI/bin/mpiexec"
-        echo ""
+        echo "Exporting TRAMPI_FORCE_DLOPEN=1 OMPI_MCA_btl=tcp,self OMPI_MCA_btl_tcp_if_include=eth0 OMPI_MCA_osc=^ucx"
+        export TRAMPI_FORCE_DLOPEN=1 OMPI_MCA_btl=tcp,self OMPI_MCA_btl_tcp_if_include=eth0 OMPI_MCA_osc=^ucx 
         module unload OpenMPI
         echo ""
         echo "Running:"
