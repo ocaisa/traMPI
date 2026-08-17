@@ -24,30 +24,30 @@ jobs:
     - name: Load EESSI
       uses: eessi/github-action-eessi@v3
       with:
-        eessi_stack_version: '2025.06'
-    - name: Restore MPICH/GCC cache
-      id: cache-mpich-gcc
+        eessi_stack_version: '2026.06'
+    - name: Restore MPI/GCC cache
+      id: cache-mpi-gcc
       uses: actions/cache/restore@v6
       with:
-        path: /home/runner/work/mpich/eessi
-        key: mpich-gcc-${{ matrix.os }}-5.0.1-v3-${{ github.sha }}
+        path: /home/runner/work/mpi/eessi
+        key: mpich-gcc-${{ matrix.os }}-0.1.0-dev-${{ github.sha }}
         restore-keys: |
-          mpich-gcc-${{ matrix.os }}-5.0.1-v3-
-    - name: Install MPICH
-      id: mpich-needed
+          mpich-gcc-${{ matrix.os }}-0.1.0-dev-
+    - name: Install MPI runtimes
+      id: mpi-needed
       shell: bash
       run: |
-        export EESSI_PROJECT_INSTALL="/home/runner/work/mpich/eessi"
-        export EASYBUILD_SOURCEPATH="/home/runner/work/mpich/eessi/sources"
+        export EESSI_PROJECT_INSTALL="/home/runner/work/mpi/eessi"
+        export EASYBUILD_SOURCEPATH="/home/runner/work/mpi/eessi/sources"
         mkdir -p $EESSI_PROJECT_INSTALL
         module load EESSI-extend
         cd easybuild
         
         # Let's check if anything is missing.
         echo ""
-        echo "DEBUGGING: eb --missing MPICH-5.0.1-GCC-14.3.0*"
+        echo "DEBUGGING: eb --missing *MPI*-mpif.eb"
 
-        EB_MISSING=$(eb --missing MPICH-5.0.1-GCC-14.3.0* 2>&1)
+        EB_MISSING=$(eb --missing *MPI*-mpif.eb 2>&1)
         EB_STATUS=$?
 
         if echo "$EB_MISSING" | grep -qF "No missing modules"; then
@@ -60,14 +60,14 @@ jobs:
           echo ""
 
           # Grab the source files first
-          eb --fetch MPICH-5.0.1-GCC-14.3.0.eb
+          eb --fetch *MPI*-mpif.eb
 
           # Then run the two builds in parallel
           # (with and without mpif)
-          eb --robot MPICH-5.0.1-GCC-14.3.0-mpif.eb &
+          eb --robot MPICH-*-mpif.eb &
           pid1=$!
 
-          eb --robot MPICH-5.0.1-GCC-14.3.0.eb &
+          eb --robot OpenMPI-*-mpif.eb &
           pid2=$!
 
           wait $pid1 || exit 1
@@ -79,19 +79,19 @@ jobs:
           echo "Cache will be updated"
         fi
 
-    - name: Save MPICH/GCC cache
+    - name: Save MPI/GCC cache
       if: |
         github.ref == 'refs/heads/main' &&
         success() &&
-        steps.mpich-needed.outputs.cache_changed == 'true'
+        steps.mpi-needed.outputs.cache_changed == 'true'
       uses: actions/cache/save@v6
       with:
-        path: /home/runner/work/mpich/eessi
-        key: mpich-gcc-${{ matrix.os }}-5.0.1-v3-${{ github.sha }}
+        path: /home/runner/work/mpi/eessi
+        key: mpi-gcc-${{ matrix.os }}-0.1.0-dev-${{ github.sha }}
     - name: Test traMPI via EESSI-extend
       shell: bash
       run: |
-        export EESSI_PROJECT_INSTALL="/home/runner/work/mpich/eessi"
+        export EESSI_PROJECT_INSTALL="/home/runner/work/mpi/eessi"
         export EESSI_USER_INSTALL="/home/runner/work/eessi"
         mkdir -p $EESSI_USER_INSTALL
         module load EESSI-extend
@@ -143,12 +143,14 @@ jobs:
         echo "(must use C here as that is what the backend supports in this case)"
         echo ""
         mpicc -Werror -Wl,--fatal-warnings test_codes/mpi_hello_world.c
-        module load MPICH/5.0.1-GCC-14.3.0
+        module load OpenMPI
         echo ""
-        echo "Exporting TRAMPI_ABI_LIBRARY=$EBROOTMPICH/lib/libmpi_abi.so"
-        export TRAMPI_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so"
+        echo "Exporting TRAMPI_ABI_LIBRARY=$EBROOTOPENMPI/lib/libmpi_abi.so"
+        export TRAMPI_ABI_LIBRARY="$EBROOTOPENMPI/lib/libmpi_abi.so"
+        echo "Exporting TRAMPI_ABI_LIBRARY_MPIEXEC=$EBROOTOPENMPI/bin/mpiexec"
+        export TRAMPI_ABI_LIBRARY_MPIEXEC="$EBROOTOPENMPI/bin/mpiexec"
         echo ""
-        module unload MPICH
+        module unload OpenMPI
         echo ""
         echo "Running:"
         echo " TRAMPI_ABI_LIBRARY_VERBOSE=1 LD_LIBRARY_PATH=$EBROOTTRAMPI/lib mpirun -n 2 ./a.out"

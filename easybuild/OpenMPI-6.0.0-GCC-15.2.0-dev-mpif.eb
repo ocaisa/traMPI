@@ -42,7 +42,7 @@ dependencies = [
 ]
 
 preconfigopts = './autogen.pl --force && '
-configopts = '--with-show-load-errors=no --enable-standard-abi=yes --enable-mpi1-compatibility=yes'
+configopts = '--with-show-load-errors=no --enable-standard-abi=yes --enable-mpi1-compatibility=yes --disable-dlopen'
 # Do not pick up the system library automatically
 configopts += ' --without-xpmem'
 

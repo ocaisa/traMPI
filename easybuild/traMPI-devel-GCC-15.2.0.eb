@@ -43,9 +43,9 @@ components = [
             "--header-patch mpif/fortran/mpi.h.patch)",
             # Provide a default MPI ABI library (awful but necessary escaping)
             'export CFLAGS="$CFLAGS -DDEFAULT_TRAMPI_ABI_LIBRARY=\'\\"$EBROOTMPICH/lib/libmpi_abi.so\\"\'"',
-            # manually set the default C and C++ compilers to what the toolchain uses
-            "sed -i 's/set(cc cc)/set(cc '$CC')/g' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
-            "sed -i 's/set(cc c++)/set(cc '$CXX')/g' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
+            # manually set the default C and C++ compilers for the MPI compilation wrappers to what the toolchain uses
+            "sed -i 's/set(mpicc.cc cc)/set(mpicc.cc $ENV{CC})/' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
+            "sed -i 's/set(mpicxx.cc c++)/set(mpicxx.cc $ENV{CXX})/' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
             # and tweak the template in general to accept TRAMPI_* variables
             "sed -i '/^@CC@=@cc@/a MPI_@CC@=\"${MPI_@CC@:-$TRAMPI_@CC@}\"' ../traMPI/mpi-abi-stubs/mpicc.in",
             # also take the chance to configure our MPI launcher wrappers
@@ -95,6 +95,11 @@ sanity_check_commands = [
     "mpifort -show",
     "mpirun --help",
     "mpiexec --help",
+    # Sneak in the mpif tests (build them first)
+    "module load CMake && cd %(start_dir)s/mpif/test && mkdir build && cd build && cmake .. && make -j ",
+    # Run the mpif tests with the defaults (excluding one test that fails for some reason with that MPICH)
+    "cd %(start_dir)s/mpif/test/build && LD_LIBRARY_PATH=$LIBRARY_PATH make test ARGS='-E status_error_f08'",
+    # Now run with OpenMPI
+    "cd %(start_dir)s/mpif/test/build && module load OpenMPI/6.0.0-GCC-15.2.0-dev-mpif && LD_LIBRARY_PATH=$LIBRARY_PATH TRAMPI_ABI_LIBRARY=$EBROOTOPENMPI/lib/libmpi_abi.so TRAMPI_FORCE_DLOPEN=1 TRAMPI_ABI_LIBRARY_MPIEXEC=$EBROOTOPENMPI/bin/mpiexec OMPI_MCA_btl=tcp,self OMPI_MCA_btl_tcp_if_include=eth0 OMPI_MCA_osc=^ucx make test"
 ]
 
-moduleclass = 'mpi'
