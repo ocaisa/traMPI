@@ -56,7 +56,7 @@ jobs:
           echo "No need to run EasyBuild installation steps"
         else
           echo ""
-          echo "Installing missing MPICH installations via EasyBuild"
+          echo "Installing missing MPI installations via EasyBuild"
           echo ""
 
           # Grab the source files first
@@ -67,7 +67,8 @@ jobs:
           eb --robot MPICH-*-mpif.eb &
           pid1=$!
 
-          eb --robot OpenMPI-*-mpif.eb &
+          # OpenMPI easyblock is not yet ready for OpenMPI6, custom easyblock works around that
+          eb --robot --include-easyblocks=./openmpi.py OpenMPI-*-mpif.eb &
           pid2=$!
 
           wait $pid1 || exit 1
