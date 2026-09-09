@@ -101,7 +101,7 @@ jobs:
           echo
           echo "EasyBuild failed. Last log:"
           echo
-          cat "$(eb --last-log)"
+          tail -400 "$(eb --last-log)"
           exit 1
         fi
         echo
