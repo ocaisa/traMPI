@@ -46,10 +46,6 @@ add_custom_command(
   VERBATIM
 )
 
-add_custom_target(trampi_generate ALL
-  DEPENDS ${TRAMPI_PROXY_SOURCE} ${TRAMPI_GENERATED_HEADER}
-)
-
 # ---------------------------------------------------------------------------
 # libmpi_abi
 # ---------------------------------------------------------------------------
@@ -153,10 +149,10 @@ endif()
 
 # The default compiler for each wrapper is the toolchain compiler in use.
 set(mpicc.CC CC)
-set(mpicc.cc ${CMAKE_C_COMPILER})
+set(mpicc.cc ${ENV{CC}})
 set(mpicc.op cc)
 set(mpicxx.CC CXX)
-set(mpicxx.cc ${CMAKE_CXX_COMPILER})
+set(mpicxx.cc ${ENV{CXX}})
 set(mpicxx.op cxx)
 set(permissions
   OWNER_READ OWNER_WRITE OWNER_EXECUTE

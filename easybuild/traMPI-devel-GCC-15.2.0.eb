@@ -19,9 +19,6 @@ builddependencies = [
     ('MPICH', '5.0.2', '-dev-mpif'),
 ]
 
-# CMake build of traMPI seems to have problems with a parallel build
-maxparallel = 1
-
 default_easyblock = 'CMakeMake'
 default_component_specs = {
     'source_urls': ['https://github.com/ocaisa/traMPI/archive'],
