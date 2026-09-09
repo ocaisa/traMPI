@@ -111,6 +111,13 @@ install(
 )
 install(FILES ${TRAMPI_GENERATED_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
+# mpif is built and tested separately after traMPI is installed.
+# Example usage after `make install`:
+#   mkdir ../mpif-build && cd ../mpif-build
+#   cmake -S ../traMPI/mpif -B . -DCMAKE_PREFIX_PATH=../traMPI/install -DMPI_HOME=../traMPI/install
+#   make && ctest -C Release
+
+
 # ---------------------------------------------------------------------------
 # Compiler wrappers (mpicc, mpicxx and their _abi symlinks)
 # ---------------------------------------------------------------------------
@@ -145,7 +152,7 @@ else()
 endif()
 
 # The default compiler for each wrapper is the toolchain compiler in use.
-set(mpicc.CC C)
+set(mpicc.CC CC)
 set(mpicc.cc ${CMAKE_C_COMPILER})
 set(mpicc.op cc)
 set(mpicxx.CC CXX)
@@ -185,7 +192,7 @@ endforeach()
 set(DEFAULT_MPIRUN ${TRAMPI_DEFAULT_MPIRUN})
 set(DEFAULT_MPIEXEC ${TRAMPI_DEFAULT_MPIEXEC})
 foreach(script mpirun mpiexec)
-  configure_file(launcher_templates/${script}.in ${script} @ONLY)
+  configure_file(wrappers/${script}.in ${script} @ONLY)
   install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/${script}
     PERMISSIONS ${permissions}
