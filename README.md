@@ -36,8 +36,9 @@ unified diff that only modifies `mpi.h`:
 ```bash
 trampi \
     --header mpi-abi-stubs/mpi.h \
-    --header-patch mpif.patch \
-    --stubs mpi-abi-stubs/mpilib.c
+    --header-patch mpif/fortran/mpi.h.patch \
+    --stubs mpi-abi-stubs/mpilib.c \
+    --stubs-extra mpif/fortran/f2c_abi_stubs.c
 ```
 
 The patch is verified before being applied and must only contain changes to
@@ -123,3 +124,25 @@ meson setup build -Dsource_c=mpi_proxy.c -Dc_args='-DDEFAULT_TRAMPI_ABI_LIBRARY=
 ```
 
 This allows the trampoline to use a fixed backend by default while still permitting it to be overridden at runtime via `TRAMPI_ABI_LIBRARY`.
+
+## Building the project with CMake
+
+```bash
+# Trampi itself
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$PWD/install \
+  -DTRAMPI_DEFAULT_ABI_LIBRARY=${EBROOTMPICH}/lib/libmpi_abi.so \
+  -DTRAMPI_DEFAULT_MPIRUN=${EBROOTMPICH}/bin/mpirun \
+  -DTRAMPI_DEFAULT_MPIEXEC=${EBROOTMPICH}/bin/mpiexec
+
+# mpif
+cmake -S mpif -B mpif/build \
+  -DMPI_C_COMPILER="$PWD/install/bin/mpicc_abi" \
+  -DMPI_HOME="$PWD/install" \
+  -DCMAKE_PREFIX_PATH="$PWD/install" \
+  -DCMAKE_INSTALL_PREFIX="$PWD/install"
+
+# tests
+cmake -S mpif/test -B mpif/test/build \
+  -DCMAKE_PREFIX_PATH="$PWD/install" \
+  -DCMAKE_INSTALL_PREFIX="$PWD/install"
+```
