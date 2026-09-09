@@ -35,26 +35,16 @@ default_component_specs = {
 
 components = [
     (name, version, {
-        'patches': ["mpif_mpilib.patch"],
-        'start_dir': 'traMPI/mpi-abi-stubs',
-        'preconfigopts': " && ".join([
-            # run trampi to create the header and .c files (note the next two lines are a single split string)
-            "(cd ../traMPI && python -m trampi --header mpi-abi-stubs/mpi.h --header-patch mpif/fortran/mpi.h.patch "
-            "--stubs mpi-abi-stubs/mpilib.c --stubs-extra mpif/fortran/f2c_abi_stubs.c)",
-            # Provide a default MPI ABI library (awful but necessary escaping)
-            'export CFLAGS="$CFLAGS -DDEFAULT_TRAMPI_ABI_LIBRARY=\'\\"$EBROOTMPICH/lib/libmpi_abi.so\\"\'"',
-            # manually set the default C and C++ compilers for the MPI compilation wrappers to what the toolchain uses
-            "sed -i 's/set(mpicc.cc cc)/set(mpicc.cc $ENV{CC})/' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
-            "sed -i 's/set(mpicxx.cc c++)/set(mpicxx.cc $ENV{CXX})/' ../traMPI/mpi-abi-stubs/CMakeLists.txt",
-            # and tweak the template in general to accept TRAMPI_* variables
-            "sed -i '/^@CC@=@cc@/a MPI_@CC@=\"${MPI_@CC@:-$TRAMPI_@CC@}\"' ../traMPI/mpi-abi-stubs/mpicc.in",
-            # also take the chance to configure our MPI launcher wrappers
-            # (assumes the defaults are RPATH-ed executables which is true for MPICH and OpenMPI)
-            "sed -i 's|@DEFAULT_MPIRUN@|'$EBROOTMPICH/bin/mpirun'|' ../traMPI/launcher_templates/mpirun.in",
-            "sed -i 's|@DEFAULT_MPIEXEC@|'$EBROOTMPICH/bin/mpiexec'|' ../traMPI/launcher_templates/mpiexec.in",
-            "",
+        'start_dir': 'traMPI',
+        # The trampoline is generated during the build (see CMakeLists.txt); the
+        # defaults below may be overridden at run time with TRAMPI_ABI_LIBRARY,
+        # TRAMPI_ABI_LIBRARY_MPIRUN and TRAMPI_ABI_LIBRARY_MPIEXEC
+        # (assumes the launcher defaults are RPATH-ed executables which is true for MPICH and OpenMPI)
+        'configopts': " ".join([
+            '-DTRAMPI_DEFAULT_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so"',
+            '-DTRAMPI_DEFAULT_MPIRUN="$EBROOTMPICH/bin/mpirun"',
+            '-DTRAMPI_DEFAULT_MPIEXEC="$EBROOTMPICH/bin/mpiexec"',
         ]),
-        'configopts': '-DSOURCE_C="../traMPI/mpi_proxy.c" -DSOURCE_H="../traMPI/mpi.h"',
     }),
     ('mpif', '1.0.0', {
         'start_dir': 'traMPI/mpif',
@@ -70,12 +60,6 @@ components = [
         # Make sure our custom mpi header is preferred during the build (not the one visible from MPICH build dep)
         'prebuildopts': 'export CPATH="%(installdir)s/include:${CPATH}" &&',
     }),
-]
-
-# Also install our MPI launcher templates (which have been tweaked with in the traMPI component to add a default)
-postinstallcmds = [
-    "cp %(builddir)s/traMPI/launcher_templates/mpirun.in %(installdir)s/bin/mpirun",
-    "cp %(builddir)s/traMPI/launcher_templates/mpiexec.in %(installdir)s/bin/mpiexec",
 ]
 
 sanity_check_paths = {
