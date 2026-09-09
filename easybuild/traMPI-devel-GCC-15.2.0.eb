@@ -47,11 +47,10 @@ components = [
             "",
         ]),
     }),
-    ('mpif', '1.0.0', {
+    ('mpif', '1.0.1', {
         'start_dir': 'traMPI/mpif',
         'preconfigopts': " && ".join([
             # Force mpif to see our (just installed) traMPI library first
-            # 'export LDFLAGS="-L%(installdir)s/lib"',
             # Tweak the MPI compiler wrapper to grab the default compiler from the PATH (and based on the toolchain)
             "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../traMPI/mpif/bin/mpifort.in",
             "",
