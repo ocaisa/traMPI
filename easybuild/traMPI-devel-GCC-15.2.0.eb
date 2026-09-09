@@ -35,7 +35,6 @@ default_component_specs = {
 
 components = [
     (name, version, {
-        'patches': ["mpif_mpilib.patch"],
         'start_dir': 'traMPI/mpi-abi-stubs',
         'preconfigopts': " && ".join([
             # run trampi to create the header and .c files (note the next two lines are a single split string)
