@@ -149,10 +149,10 @@ endif()
 
 # The default compiler for each wrapper is the toolchain compiler in use.
 set(mpicc.CC CC)
-set(mpicc.cc ${ENV{CC}})
+set(mpicc.cc $ENV{CC})
 set(mpicc.op cc)
 set(mpicxx.CC CXX)
-set(mpicxx.cc ${ENV{CXX}})
+set(mpicxx.cc $ENV{CXX})
 set(mpicxx.op cxx)
 set(permissions
   OWNER_READ OWNER_WRITE OWNER_EXECUTE

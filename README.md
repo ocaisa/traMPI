@@ -62,26 +62,66 @@ A successful run reports the number of verified wrappers and writes `mpi_proxy.c
 
 ## Building the trampoline library
 
-The generated source can be built using the existing `mpi-abi-stubs` build system (which supports a `Makefile`, `CMake`, and `Meson`).
-
-First, build the reference library if desired to ensure compilation succeeds in general:
+The generated source can be built using the `mpi-abi-stubs` build system. The preferred method is CMake:
 
 ```bash
-cd mpi-abi-stubs
-make
-make clean
+# Configure and build with CMake
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$PWD/install \
+      -DSOURCE_C=mpi_proxy.c -DSOURCE_H=mpi.h   # add SOURCE_H only if you used a header patch
+cmake --build build
+cmake --install build
 ```
 
-Then build the trampoline implementation by overriding the source file:
+If you prefer the legacy Makefile or Meson, the same overrides are available:
 
 ```bash
-ln -s ../mpi_proxy.c  # Make a symlink to our generated code
-make SOURCE_C=/path/to/mpi_proxy.c SOURCE_H=/path/to/mpi.h
+# Makefile
+make SOURCE_C=mpi_proxy.c SOURCE_H=mpi.h   # SOURCE_H optional
+
+# Meson
+meson setup build -Dsource_c=mpi_proxy.c -Dsource_h=mpi.h
+meson compile -C build
 ```
 
-(`SOURCE_H` is only required if using `mpif`)
+### Building a comprehensive trampoline library (CMake only)
 
-A similar source override mechanism is supported by the CMake (`-DSOURCE_C=/path/to/mpi_proxy.c`, `-DSOURCE_H=/path/to/mpi.h`) and Meson (`-Dsource_c=mpi_proxy.c`, `-Dsource_h=mpi.h`) build systems.
+If you are seriously going to use this library, then it needs to appear like a (somewhat) complete
+MPI installation, which means support for C/C++/Fortran as well as an `mpirun`/`mpiexec` launcher. You
+also need a default backend MPI implementation. A full installation is a multi-step process.
+
+Your backend library needs to patched for mpif. This is out of scope to describe here, but take a look at
+the MPICH/OpenMPI builds in the `easyconfig` subdirectory, or look at the build scripts under the
+[`mpif` repository](https://github.com/eschnett/mpif/tree/main/ci-scripts).
+
+```bash
+# Configure and build traMPI with a default backend
+cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$PWD/install \
+      -DTRAMPI_DEFAULT_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so -DTRAMPI_DEFAULT_MPIRUN="$EBROOTMPICH/bin/mpirun" \
+      -DTRAMPI_DEFAULT_MPIEXEC="$EBROOTMPICH/bin/mpiexec"
+cmake --build build
+cmake --install build
+```
+
+```bash
+# build the mpif bindings against the installed traMPI
+cmake -S mpif -B mpif/build \
+      -DMPI_C_COMPILER=$PWD/install/bin/mpicc_abi \
+      -DMPI_HOME=$PWD/install \
+      -DCMAKE_PREFIX_PATH=$PWD/install \
+      -DCMAKE_INSTALL_PREFIX=$PWD/install
+cmake --build mpif/build
+```
+
+```bash
+# Optional: run the mpif test suite
+cmake -S mpif/test -B mpif/test/build \
+      -DCMAKE_PREFIX_PATH=$PWD/install \
+      -DCMAKE_INSTALL_PREFIX=$PWD/install
+cmake --build mpif/test/build
+
+# Run the tests (requires a default backend library)
+cd mpif/test/build && make test
+```
 
 ## Output
 
@@ -104,7 +144,8 @@ export TRAMPI_ABI_LIBRARY=/path/to/libmpi.so
 ./my_mpi_application
 ```
 
-To embed a default backend library at compile time requires some awkward but necessary quoting since we don't control the build system. For the `Makefile`
+If not using the CMake described above, embedding a default backend library at compile time requires some awkward but
+necessary quoting since we don't control the build system. For the `Makefile`
 
 ```bash
 export CPPFLAGS='-DDEFAULT_TRAMPI_ABI_LIBRARY=\"/path/to/libmpi_abi.so\"'
@@ -124,25 +165,3 @@ meson setup build -Dsource_c=mpi_proxy.c -Dc_args='-DDEFAULT_TRAMPI_ABI_LIBRARY=
 ```
 
 This allows the trampoline to use a fixed backend by default while still permitting it to be overridden at runtime via `TRAMPI_ABI_LIBRARY`.
-
-## Building the project with CMake
-
-```bash
-# Trampi itself
-cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$PWD/install \
-  -DTRAMPI_DEFAULT_ABI_LIBRARY=${EBROOTMPICH}/lib/libmpi_abi.so \
-  -DTRAMPI_DEFAULT_MPIRUN=${EBROOTMPICH}/bin/mpirun \
-  -DTRAMPI_DEFAULT_MPIEXEC=${EBROOTMPICH}/bin/mpiexec
-
-# mpif
-cmake -S mpif -B mpif/build \
-  -DMPI_C_COMPILER="$PWD/install/bin/mpicc_abi" \
-  -DMPI_HOME="$PWD/install" \
-  -DCMAKE_PREFIX_PATH="$PWD/install" \
-  -DCMAKE_INSTALL_PREFIX="$PWD/install"
-
-# tests
-cmake -S mpif/test -B mpif/test/build \
-  -DCMAKE_PREFIX_PATH="$PWD/install" \
-  -DCMAKE_INSTALL_PREFIX="$PWD/install"
-```
