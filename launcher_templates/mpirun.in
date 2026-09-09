@@ -1,11 +1,11 @@
 #!/bin/sh
 
-MPIEXEC="${TRAMPI_ABI_LIBRARY_MPIRUN:-@DEFAULT_MPIRUN@}"
+MPIRUN="${TRAMPI_ABI_LIBRARY_MPIRUN:-@DEFAULT_MPIRUN@}"
 
-if [ -z "$MPIEXEC" ]; then
+if [ -z "$MPIRUN" ]; then
     echo "TRAMPI:: No MPI launcher configured." >&2
     echo "TRAMPI:: Please set TRAMPI_ABI_LIBRARY_MPIRUN or configure a default." >&2
     exit 1
 fi
 
-exec "$MPIEXEC" "$@"
+exec "$MPIRUN" "$@"

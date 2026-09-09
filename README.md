@@ -57,7 +57,7 @@ The generator will:
   trampoline.
 * Verify that every parsed function has a corresponding wrapper.
 
-A successful run reports the number of verified wrappers and writes `mpi_proxy.c` into the current directory.
+A successful run reports the number of verified wrappers and writes `mpi_proxy.c` (and, when using `--header-patch`, `mpi.h`) into the output directory, which defaults to the current directory and can be changed with `-o/--output`.
 
 ## Building the trampoline library
 

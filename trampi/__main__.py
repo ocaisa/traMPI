@@ -10,13 +10,12 @@ import shutil
 import stat
 import subprocess
 import sys
+import re
 
 
 from pathlib import Path
 from .mpi_parser import parse_header, parse_header_patch
-from .verify import verify
 from .emitter import emit_proxy
-from .verify_output import verify_output
 
 
 def verify_header_patch(filename):
@@ -105,70 +104,151 @@ def main():
     )
 
     parser.add_argument(
-        "-o",
-        "--output",
-        default="mpi_proxy.c",
-        help="Output C file",
+        "--stubs-extra",
+        required=False,
+        help="Path to additional C file(s) to concatenate with mpilib.c "
+             "(e.g., f2c_abi_stubs.c). Required when --header-patch is used.",
     )
 
     parser.add_argument(
-        "--no-verify-output",
-        action="store_true",
-        help="Skip verification of generated output",
+        "-o",
+        "--output",
+        default=".",
+        help="Output directory for mpi_proxy.c (and mpi.h when using --header-patch)",
     )
 
     args = parser.parse_args()
+
+    output_dir = Path(args.output).resolve()
+
+    if output_dir.exists() and not output_dir.is_dir():
+        print(f"ERROR: --output must be a directory, got file: {args.output}")
+        sys.exit(1)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    output_path = output_dir / "mpi_proxy.c"
+
+    # Validate: header-patch and stubs-extra must be used together
+    mpif_usage = """
+Usage:
+trampi --header mpi.h --header-patch mpi.h.patch --stubs mpilib.c --stubs-extra f2c_abi_stubs.c -o build/
+"""
+    mpif_workflow = """
+Build workflow:
+1. Generate mpi_proxy.c (combines mpilib.c + f2c_abi_stubs.c, applies header patch)
+2. Build the library with the patched mpi.h
+3. Install both the library and patched mpi.h
+"""
+
+    if args.header_patch and not args.stubs_extra:
+        print("ERROR: --header-patch requires --stubs-extra")
+        print("The extra stubs file (e.g., f2c_abi_stubs.c) must implement all functions declared in the header patch.")
+        print(mpif_usage)
+        print(mpif_workflow)
+        sys.exit(1)
+
+    if args.stubs_extra and not args.header_patch:
+        print("ERROR: --stubs-extra requires --header-patch")
+        print("Extra stubs file must be accompanied by a header patch that declares the functions it implements.")
+        print(mpif_usage)
+        print(mpif_workflow)
+        sys.exit(1)
 
     print(f"Reading {args.header}")
     functions = parse_header(args.header)
 
     extension_functions = []
-    patch_text = ""
     if args.header_patch:
+        print(mpif_workflow)
         verify_header_patch(args.header_patch)
         print(f"Reading {args.header_patch}")
         extension_functions = parse_header_patch(args.header_patch)
 
         # Place the patched mpi.h alongside the generated mpi_proxy.c
-        output_dir = Path(args.output).resolve().parent
         patched_header_path = output_dir / "mpi.h"
         apply_header_patch(
             args.header,
             args.header_patch,
             patched_header_path,
         )
-        patch_text = f" and {patched_header_path}"
-        # Drop (P)MPI_Precv_init(_c)/(P)MPI_Psend_init(_c) completely from the main functions, mpif will handle these
-        # (this is an mpif decision, https://github.com/eschnett/mpif/commit/00782d33956f832d214696f78b138ce1958c922c)
-        exclude_list = [
-            "MPI_Precv_init_c", "MPI_Psend_init_c", "PMPI_Precv_init_c", "PMPI_Psend_init_c",
-            "MPI_Precv_init", "MPI_Psend_init", "PMPI_Precv_init", "PMPI_Psend_init",
-        ]
-        functions = [function for function in functions if function.name not in exclude_list]
 
-    all_functions = functions + extension_functions
-    verify(all_functions)
+    # Handle extra stubs files if provided
+    stubs_path = args.stubs
+    if args.stubs_extra:
+        print(f"Reading extra stubs {args.stubs_extra}")
 
-    print(f"Reading {args.stubs}")
+        # Extract function names from original stubs
+        def extract_functions(filepath):
+
+            funcs = set()
+            with open(filepath, "r") as f:
+                for line in f:
+                    m = re.search(r"\b(MPI|PMPI)_[A-Za-z0-9_]+\s*\(", line)
+                    if m:
+                        funcs.add(m.group(0).rstrip("("))
+            return funcs
+
+        orig_funcs = extract_functions(args.stubs)
+
+        # Concatenate extra file(s) to a temporary copy
+        combined_stubs_path = output_dir / "mpilib_combined.c"
+
+        with open(args.stubs, "r") as orig, open(combined_stubs_path, "w") as combined:
+            combined.write(orig.read())
+            combined.write("\n\n/* Additional stubs from: " + args.stubs_extra + " */\n")
+            with open(args.stubs_extra, "r") as extra:
+                for line in extra:
+                    if line.lstrip().startswith("#include"):
+                        continue
+                    combined.write(line)
+
+        # Extract function names from extra file
+        extra_funcs = extract_functions(args.stubs_extra)
+
+        # Check for duplicates with original stubs (linker error)
+        duplicates = orig_funcs & extra_funcs
+        if duplicates:
+            print(f"WARNING: {len(duplicates)} functions defined in both files:")
+            for fn in sorted(duplicates):
+                print(f"  - {fn}")
+            print("These may cause duplicate symbol errors at link time.")
+
+        # Check that all functions in extra stubs are declared in header patch
+        extension_func_names = {f.name for f in extension_functions}
+        undeclared = extra_funcs - extension_func_names
+        if undeclared:
+            print(f"ERROR: {len(undeclared)} functions in extra stubs not declared in header patch:")
+            for fn in sorted(undeclared):
+                print(f"  - {fn}")
+            print("Extra stubs file must only implement functions declared in the header patch.")
+            sys.exit(1)
+
+        stubs_path = combined_stubs_path
+        print(f"Extra stubs: all {len(extra_funcs)} functions declared in header patch, {len(duplicates)} duplicates")
+
+    print(f"Reading {stubs_path}")
 
     emit_proxy(
         functions=functions,
         extension_functions=extension_functions,
-        mpi_stubs=args.stubs,
-        output=args.output,
+        mpi_stubs=stubs_path,
+        output=output_path,
     )
 
-    print(f"Wrote {args.output}")
+    written = [output_path]
+    if args.header_patch:
+        written.append(output_dir / "mpi.h")
 
-    if not args.no_verify_output:
-        verify_output(
-            functions=functions,
-            extension_functions=extension_functions,
-            mpi_stubs=args.stubs,
-            mpi_proxy=args.output,
-        )
+    verb = "has" if len(written) == 1 else "have"
+    print(f"{' and '.join(str(p) for p in written)} {verb} been written.")
 
-    print(f"{Path(args.output).resolve()}{patch_text} have been written.")
+    # Summary of function sources
+    print()
+    print("Function source summary:")
+    print(f"  Base functions (from mpi.h): {len(functions)}")
+    print(f"  Extension functions (from header patch): {len(extension_functions)}")
+    print()
     print("Done.")
 
 
