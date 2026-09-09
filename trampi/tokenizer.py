@@ -231,7 +231,7 @@ def parse_prototype(prototype):
 
     prefix = prototype[:left]
 
-    args = prototype[left + 1 : right]
+    args = prototype[(left + 1): right]
 
     return_type, function_name = split_return_type_and_name(prefix)
 

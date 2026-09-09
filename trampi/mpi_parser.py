@@ -5,7 +5,6 @@ Read mpi.h and build a list of MPI functions.
 """
 
 from dataclasses import dataclass
-import subprocess
 import re
 
 from .tokenizer import parse_prototype, extract_identifier

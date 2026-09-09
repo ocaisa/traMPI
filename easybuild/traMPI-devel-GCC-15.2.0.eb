@@ -39,8 +39,8 @@ components = [
         'start_dir': 'traMPI/mpi-abi-stubs',
         'preconfigopts': " && ".join([
             # run trampi to create the header and .c files (note the next two lines are a single split string)
-            "(cd ../traMPI && python -m trampi --header mpi-abi-stubs/mpi.h --stubs mpi-abi-stubs/mpilib.c "
-            "--header-patch mpif/fortran/mpi.h.patch)",
+            "(cd ../traMPI && python -m trampi --header mpi-abi-stubs/mpi.h --header-patch mpif/fortran/mpi.h.patch "
+            "--stubs mpi-abi-stubs/mpilib.c --stubs-extra mpif/fortran/f2c_abi_stubs.c)",
             # Provide a default MPI ABI library (awful but necessary escaping)
             'export CFLAGS="$CFLAGS -DDEFAULT_TRAMPI_ABI_LIBRARY=\'\\"$EBROOTMPICH/lib/libmpi_abi.so\\"\'"',
             # manually set the default C and C++ compilers for the MPI compilation wrappers to what the toolchain uses
@@ -102,4 +102,3 @@ sanity_check_commands = [
     # Now run with OpenMPI
     "cd %(start_dir)s/mpif/test/build && module load OpenMPI/6.0.0-GCC-15.2.0-dev-mpif && LD_LIBRARY_PATH=$LIBRARY_PATH TRAMPI_ABI_LIBRARY=$EBROOTOPENMPI/lib/libmpi_abi.so TRAMPI_FORCE_DLOPEN=1 TRAMPI_ABI_LIBRARY_MPIEXEC=$EBROOTOPENMPI/bin/mpiexec OMPI_MCA_btl=tcp,self OMPI_MCA_btl_tcp_if_include=eth0 OMPI_MCA_osc=^ucx make test"
 ]
-
