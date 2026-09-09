@@ -44,6 +44,7 @@ components = [
             '-DTRAMPI_DEFAULT_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so"',
             '-DTRAMPI_DEFAULT_MPIRUN="$EBROOTMPICH/bin/mpirun"',
             '-DTRAMPI_DEFAULT_MPIEXEC="$EBROOTMPICH/bin/mpiexec"',
+            "",
         ]),
     }),
     ('mpif', '1.0.0', {

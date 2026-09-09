@@ -30,9 +30,9 @@ jobs:
       uses: actions/cache/restore@v6
       with:
         path: /home/runner/work/mpi/eessi
-        key: mpich-gcc-${{ matrix.os }}-0.1.0-dev-${{ github.sha }}
+        key: mpi-gcc-${{ matrix.os }}-0.1.0-dev-${{ github.sha }}
         restore-keys: |
-          mpich-gcc-${{ matrix.os }}-0.1.0-dev-
+          mpi-gcc-${{ matrix.os }}-0.1.0-dev-
     - name: Install MPI runtimes
       id: mpi-needed
       shell: bash
