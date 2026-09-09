@@ -63,22 +63,24 @@ def apply_header_patch(header, header_patch, output_header):
     output_header = Path(output_header)
     output_header.parent.mkdir(parents=True, exist_ok=True)
 
-    # Copy the original header.
-    shutil.copy2(header, output_header)
+    # Ensure the original header is writable.
+    orig_path = Path(header)
+    mode = orig_path.stat().st_mode
+    os.chmod(orig_path, mode | stat.S_IWUSR)
 
-    # Ensure the copied file is writable.
-    mode = output_header.stat().st_mode
-    os.chmod(output_header, mode | stat.S_IWUSR)
-
-    # Apply the patch in-place.
+    # Apply the patch in-place to the original header.
     subprocess.run(
         [
             "patch",
-            str(output_header),
+            "-l",
+            str(orig_path),
             str(header_patch),
         ],
         check=True,
     )
+
+    # Copy the patched header to the destination.
+    shutil.copy2(orig_path, output_header)
 
 
 def main():
