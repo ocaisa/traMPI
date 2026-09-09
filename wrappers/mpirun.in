@@ -8,4 +8,9 @@ if [ -z "$MPIRUN" ]; then
     exit 1
 fi
 
-exec "$MPIRUN" "$@"
+# Verify the launcher exists
+if ! command -v "$MPIRUN" >/dev/null 2>&1; then
+  echo "TRAMPI:: Launcher not found: $MPIRUN" >&2
+  exit 1
+fi
+exec -a "$0" "$MPIRUN" "$@"
