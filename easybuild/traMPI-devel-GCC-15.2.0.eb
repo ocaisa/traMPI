@@ -21,11 +21,11 @@ builddependencies = [
 
 default_easyblock = 'CMakeMake'
 default_component_specs = {
-    'source_urls': ['https://github.com/ocaisa/traMPI/archive'],
+    'source_urls': ['https://github.com/%(github_account)s/traMPI/archive'],
     'sources': [{
         'filename': '%(software_commit)s.tar.xz',
         "git_config": {
-            "url": "https://github.com/ocaisa",
+            "url": "https://github.com/%(github_account)s",
             "repo_name": "traMPI",
             "commit": "%(software_commit)s",
             "recursive": True,
