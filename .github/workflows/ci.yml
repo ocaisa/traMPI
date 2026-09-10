@@ -5,6 +5,8 @@ concurrency:
 on:
   workflow_dispatch:  # Allows manual triggering
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -90,6 +92,9 @@ jobs:
         path: /home/runner/work/mpi/eessi
         key: mpi-gcc-${{ matrix.os }}-0.1.0-dev-${{ github.sha }}
     - name: Test traMPI via EESSI-extend
+      env:
+        GITHUB_ACCOUNT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.owner.login || github.repository_owner }}
+        SOFTWARE_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       shell: bash
       run: |
         export EESSI_PROJECT_INSTALL="/home/runner/work/mpi/eessi"
@@ -97,7 +102,8 @@ jobs:
         mkdir -p $EESSI_USER_INSTALL
         module load EESSI-extend
         unset EASYBUILD_DEBUG
-        if ! eb --software-commit="$GITHUB_SHA" easybuild/traMPI-devel-GCC-15.2.0.eb; then
+
+        if ! eb --software-commit="$SOFTWARE_COMMIT" easybuild/traMPI-devel-GCC-15.2.0.eb; then
           echo
           echo "EasyBuild failed. Last log:"
           echo
