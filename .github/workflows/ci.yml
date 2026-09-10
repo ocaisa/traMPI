@@ -5,6 +5,8 @@ concurrency:
 on:
   workflow_dispatch:  # Allows manual triggering
   push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -101,7 +103,7 @@ jobs:
         module load EESSI-extend
         unset EASYBUILD_DEBUG
 
-        if ! eb --software-commit="$SOFTWARE_COMMIT" --github-account="$GITHUB_ACCOUNT" easybuild/traMPI-devel-GCC-15.2.0.eb; then
+        if ! eb --software-commit="$SOFTWARE_COMMIT" easybuild/traMPI-devel-GCC-15.2.0.eb; then
           echo
           echo "EasyBuild failed. Last log:"
           echo

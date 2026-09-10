@@ -19,6 +19,9 @@ builddependencies = [
     ('MPICH', '5.0.2', '-dev-mpif'),
 ]
 
+import os
+github_account = os.getenv("GITHUB_ACCOUNT", "ocaisa")
+
 default_easyblock = 'CMakeMake'
 default_component_specs = {
     'source_urls': ['https://github.com/%(github_account)s/traMPI/archive'],
