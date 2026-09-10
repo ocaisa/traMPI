@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...4.3)
+cmake_minimum_required(VERSION 3.27...4.3)
 
 project(traMPI LANGUAGES C CXX)
 
@@ -10,8 +10,6 @@ set(TRAMPI_DEFAULT_MPIRUN "" CACHE STRING
   "Default launcher for the installed mpirun wrapper; may be overridden at run time with TRAMPI_ABI_LIBRARY_MPIRUN")
 set(TRAMPI_DEFAULT_MPIEXEC "" CACHE STRING
   "Default launcher for the installed mpiexec wrapper; may be overridden at run time with TRAMPI_ABI_LIBRARY_MPIEXEC")
-
-option(RELOCATABLE "Relocatable install" FALSE)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
@@ -77,28 +75,6 @@ if(TRAMPI_DEFAULT_ABI_LIBRARY)
   target_compile_definitions(${LIBNAME} PRIVATE "DEFAULT_TRAMPI_ABI_LIBRARY=\"${TRAMPI_DEFAULT_ABI_LIBRARY}\"")
 endif()
 
-if(APPLE AND CMAKE_VERSION VERSION_LESS 3.17.0)
-  get_target_property(v1 ${LIBNAME} MACHO_COMPATIBILITY_VERSION)
-  get_target_property(v2 ${LIBNAME} MACHO_CURRENT_VERSION)
-  set(ldflags "-compatibility_version,${v1},-current_version,${v2}")
-  if(CMAKE_VERSION VERSION_LESS 3.12.0)
-    set_target_properties(${LIBNAME} PROPERTIES LINK_FLAGS "-Wl,${ldflags}")
-  else()
-    target_link_options(${LIBNAME} PRIVATE "LINKER:${ldflags}")
-  endif()
-endif()
-
-if(WIN32 AND CMAKE_VERSION VERSION_LESS 3.27.0)
-  get_target_property(versioned_dll_name ${LIBNAME} DLL_NAME_WITH_SOVERSION)
-  if(versioned_dll_name)
-    set_target_properties(
-      ${LIBNAME} PROPERTIES
-      ARCHIVE_OUTPUT_NAME ${LIBNAME}
-      RUNTIME_OUTPUT_NAME ${LIBNAME}-${ABI_MAJOR}
-    )
-  endif()
-endif()
-
 install(
   TARGETS ${LIBNAME}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
@@ -117,35 +93,6 @@ install(FILES ${TRAMPI_GENERATED_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 # ---------------------------------------------------------------------------
 # Compiler wrappers (mpicc, mpicxx and their _abi symlinks)
 # ---------------------------------------------------------------------------
-
-if(RELOCATABLE)
-  set(prefix "$(CDPATH='' cd -- \"$(dirname -- \"$0\")\"/.. && pwd)")
-  set(bindir $prefix/${CMAKE_INSTALL_BINDIR})
-  set(incdir $prefix/${CMAKE_INSTALL_INCLUDEDIR})
-  set(libdir $prefix/${CMAKE_INSTALL_LIBDIR})
-else()
-  set(prefix \"${CMAKE_INSTALL_PREFIX}\")
-  if(IS_ABSOLUTE ${CMAKE_INSTALL_BINDIR})
-    set(bindir \"${CMAKE_INSTALL_FULL_BINDIR}\")
-  else()
-    set(bindir $prefix/${CMAKE_INSTALL_BINDIR})
-  endif()
-  if(IS_ABSOLUTE ${CMAKE_INSTALL_INCLUDEDIR})
-    set(incdir \"${CMAKE_INSTALL_FULL_INCLUDEDIR}\")
-  else()
-    set(incdir $prefix/${CMAKE_INSTALL_INCLUDEDIR})
-  endif()
-  if(IS_ABSOLUTE ${CMAKE_INSTALL_LIBDIR})
-    set(libdir \"${CMAKE_INSTALL_FULL_LIBDIR}\")
-  else()
-    set(libdir $prefix/${CMAKE_INSTALL_LIBDIR})
-  endif()
-endif()
-if(WIN32)
-  set(rpath $bindir)
-else()
-  set(rpath $libdir)
-endif()
 
 # The default compiler for each wrapper is the toolchain compiler in use.
 set(mpicc.CC CC)
