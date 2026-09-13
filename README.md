@@ -76,7 +76,7 @@ the MPICH/OpenMPI builds in the `easyconfig` subdirectory, or look at the build 
 ```bash
 # Configure and build traMPI with a default backend
 cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$PWD/install \
-      -DTRAMPI_DEFAULT_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so \
+      -DTRAMPI_DEFAULT_ABI_LIBRARY="$EBROOTMPICH/lib/libmpi_abi.so" \
       -DTRAMPI_DEFAULT_MPIRUN="$EBROOTMPICH/bin/mpirun" \
       -DTRAMPI_DEFAULT_MPIEXEC="$EBROOTMPICH/bin/mpiexec"
 cmake --build build

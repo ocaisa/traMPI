@@ -13,6 +13,21 @@ on:
 # Declare default permissions as read only.
 permissions: read-all
 jobs:
+  generator_tests:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v6
+      with:
+        submodules: recursive
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - name: Install generator with test dependencies
+      run: pip install -e .[test]
+    - name: Run generator unit tests
+      run: pytest tests/ -v
   minimal_usage:
     runs-on: ${{ matrix.os }}
     strategy:

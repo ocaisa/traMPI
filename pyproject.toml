@@ -9,6 +9,9 @@ description = "Generator for MPI ABI trampoline libraries"
 readme = "README.md"
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
 [project.scripts]
 trampi = "trampi.__main__:main"
 
