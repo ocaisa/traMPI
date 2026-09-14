@@ -53,9 +53,10 @@ components = [
     ('mpif', '1.0.1', {
         'start_dir': 'traMPI/mpif',
         'preconfigopts': " && ".join([
-            # Force mpif to see our (just installed) traMPI library first
             # Tweak the MPI compiler wrapper to grab the default compiler from the PATH (and based on the toolchain)
             "sed -i 's|@CMAKE_Fortran_COMPILER@|${TRAMPI_FC:-'$FC'}|' ../traMPI/mpif/bin/mpifort.in",
+            # And give it similar behaviour to our traMPI wrappers for C/C++
+            "sed -i 's|@CMAKE_Fortran_FLAGS@ @MPIF_Fortran_FLAGS_STR@|${MPI_FFLAGS:-${TRAMPI_FFLAGS}}|' ../traMPI/mpif/bin/mpifort.in"
             "",
         ]),
         # Use our just installed MPI compiler as the C compiler
