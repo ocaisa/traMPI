@@ -98,9 +98,11 @@ install(FILES ${TRAMPI_GENERATED_HEADER} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 set(mpicc.CC CC)
 set(mpicc.cc $ENV{CC})
 set(mpicc.op cc)
+set(mpicc.flags CFLAGS)
 set(mpicxx.CC CXX)
 set(mpicxx.cc $ENV{CXX})
 set(mpicxx.op cxx)
+set(mpicxx.flags CXXFLAGS)
 set(permissions
   OWNER_READ OWNER_WRITE OWNER_EXECUTE
   GROUP_READ GROUP_EXECUTE
@@ -110,6 +112,7 @@ foreach(script mpicc mpicxx)
   set(CC ${${script}.CC})
   set(cc ${${script}.cc})
   set(op ${${script}.op})
+  set(flags ${${script}.flags})
   configure_file(wrappers/mpicc.in ${script} @ONLY)
   install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/${script}

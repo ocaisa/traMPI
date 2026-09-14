@@ -14,6 +14,8 @@ if [[ -n "$MPI_@CC@" ]]; then
     @CC@="$MPI_@CC@"
 fi
 
+MPI_@flags@="${MPI_@flags@:-$TRAMPI_@flags@}"
+
 Exec="exec"
 mode="link"
 arglist=("$@")
@@ -74,9 +76,9 @@ if [[ "@${arglist[*]}" = "@-v" ]]; then
 fi
 
 if [[ "$mode" = "compile" ]]; then
-    $Exec "${@CC@}" "${arglist[@]}" -I"${incdir}"
+    $Exec "${@CC@}" ${MPI_@flags@} "${arglist[@]}" -I"${incdir}"
 elif [[ "$mode" = "link" ]]; then
-    $Exec "${@CC@}" "${arglist[@]}" -I"${incdir}" -L"${libdir}" -lmpi_abi
+    $Exec "${@CC@}" ${MPI_@flags@} "${arglist[@]}" -I"${incdir}" -L"${libdir}" -lmpi_abi
 elif [[ "$mode" = "" ]]; then
     $Exec "${@CC@}" "${arglist[@]}"
 else
