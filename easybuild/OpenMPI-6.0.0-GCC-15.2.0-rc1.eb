@@ -1,6 +1,6 @@
 name = 'OpenMPI'
 version = '6.0.0'
-versionsuffix = "-dev"
+versionsuffix = "-rc1"
 
 homepage = 'https://www.open-mpi.org/'
 description = """The Open MPI Project is an open source MPI-3 implementation."""
