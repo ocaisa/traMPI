@@ -19,7 +19,7 @@ sources = {
         },
 }
 patches = [
-    "tweak_ompi_util_tests.patch",
+#    "tweak_ompi_util_tests.patch",
     "openmpi_mpif.patch"
 ]
 builddependencies = [

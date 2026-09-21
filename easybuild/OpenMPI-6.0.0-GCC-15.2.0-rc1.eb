@@ -18,7 +18,7 @@ sources = {
         "recursive": True,
         },
 }
-patches = ["tweak_ompi_util_tests.patch"]
+# patches = ["tweak_ompi_util_tests.patch"]
 builddependencies = [
     ('pkgconf', '2.5.1'),
     ('Perl', '5.42.0'),
