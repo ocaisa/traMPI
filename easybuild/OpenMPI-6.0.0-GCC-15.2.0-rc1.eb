@@ -1,6 +1,6 @@
 name = 'OpenMPI'
 version = '6.0.0'
-versionsuffix = "-dev-mpif"
+versionsuffix = "-rc1"
 
 homepage = 'https://www.open-mpi.org/'
 description = """The Open MPI Project is an open source MPI-3 implementation."""
@@ -8,7 +8,7 @@ description = """The Open MPI Project is an open source MPI-3 implementation."""
 toolchain = {'name': 'GCC', 'version': '15.2.0'}
 
 source_urls = ['https://www.open-mpi.org/software/ompi/v%(version_major_minor)s/downloads']
-local_commit_for_mpif = "003e0ca0d2d0145359c661f239633427919f4b13"
+local_commit_for_mpif = "a7b1e6d6e13219472869997a57ab5ad1700ea7ca"  # OpenMPI 6.0.0-rc1
 sources = {
     'filename': f'{local_commit_for_mpif}.tar.xz',
     "git_config": {
@@ -18,11 +18,7 @@ sources = {
         "recursive": True,
         },
 }
-patches = [
-    "tweak_ompi_util_tests.patch",
-    "openmpi-fbtl-posix-aio.patch",
-    "openmpi_mpif.patch"
-]
+# patches = ["tweak_ompi_util_tests.patch"]
 builddependencies = [
     ('pkgconf', '2.5.1'),
     ('Perl', '5.42.0'),
@@ -36,13 +32,12 @@ dependencies = [
     ('UCX', '1.20.0'),
     ('libfabric', '2.5.0'),
     ('PMIx', '6.1.0'),
-# Use the internal PRRTE as they need to be compatible
 #    ('PRRTE', '4.1.0'),
     ('UCC', '1.7.0'),
 ]
 
 preconfigopts = './autogen.pl --force && '
-configopts = '--with-show-load-errors=no --enable-standard-abi=yes --enable-mpi1-compatibility=yes --disable-dlopen'
+configopts = '--with-show-load-errors=no --enable-standard-abi=yes'
 # Do not pick up the system library automatically
 configopts += ' --without-xpmem'
 
