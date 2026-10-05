@@ -15,7 +15,7 @@ import re
 
 from pathlib import Path
 from .mpi_parser import parse_header, parse_header_patch
-from .emitter import emit_proxy
+from .emitter import emit_proxy, GPU_HEADER_BLOCK
 
 
 def verify_header_patch(filename):
@@ -79,6 +79,10 @@ def apply_header_patch(header, header_patch, output_header):
         ],
         check=True,
     )
+
+    # Declare the GPU-support queries that the generated proxy defines.
+    with open(output_header, "a", encoding="utf8") as f:
+        f.write(GPU_HEADER_BLOCK)
 
 
 def main():

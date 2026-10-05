@@ -154,6 +154,22 @@ def test_emit_proxy_writes_trampolines_for_all_functions(tmp_path):
         assert f"Unable to resolve {name}" in text
 
 
+def test_emit_proxy_defines_optional_gpu_queries(tmp_path):
+    functions = _functions(tmp_path)
+    stubs = tmp_path / "mpilib.c"
+    stubs.write_text(FAKE_STUBS, encoding="utf8")
+    output = tmp_path / "mpi_proxy.c"
+    emit_proxy(functions=functions, extension_functions=[], mpi_stubs=str(stubs), output=output)
+    text = output.read_text(encoding="utf8")
+    for prefix in ("MPIX", "PMPIX"):
+        for name in ("cuda", "hip", "rocm", "ze"):
+            assert f"int {prefix}_Query_{name}_support(void) {{" in text
+        assert f"int {prefix}_GPU_query_support(int gpu_type, int *is_supported) {{" in text
+        assert f'dlsym(handle, "{prefix}_Query_cuda_support")' in text
+    # Absent symbols must not be counted as missing/required.
+    assert "return MPI_ERR_ARG;" in text
+
+
 def test_emit_proxy_includes_extension_functions(tmp_path):
     functions = _functions(tmp_path, "int MPI_Fake_fn(int *a);\n")
     ext_header = tmp_path / "ext.h"

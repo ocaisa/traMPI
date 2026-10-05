@@ -157,6 +157,16 @@ The resulting shared library exports the same MPI/PMPI interface as the referenc
 library you can use the environment variable `TRAMPI_ABI_LIBRARY_VERBOSE` to inspect any missing symbols from there
 (these will only fail if they are actually used by the application).
 
+### GPU-support queries
+
+The library also provides the GPU-awareness queries `MPIX_Query_cuda_support()`, `MPIX_Query_hip_support()`,
+`MPIX_Query_rocm_support()`, `MPIX_Query_ze_support()` and `MPIX_GPU_query_support(gpu_type, &is_supported)` (plus
+`PMPIX_` variants), with the constants `MPIX_GPU_SUPPORT_CUDA/ZE/HIP` (0/1/2) and
+`MPIX_CUDA_AWARE_SUPPORT`/`MPIX_ROCM_AWARE_SUPPORT`. These are not part of the MPI ABI, so each is looked up in the
+backend individually; a query the backend does not provide answers 0 ("not supported") rather than failing, `hip` and
+`rocm` are treated as the same question, and an unknown `gpu_type` returns `MPI_ERR_ARG`. The prototypes and constants
+are appended to the patched `mpi.h` written when using `--header-patch`.
+
 ## Selecting the backend MPI library
 
 The generated trampoline loads the backend MPI library at runtime using `dlmopen()` (if available) or `dlopen()`. You

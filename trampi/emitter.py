@@ -17,6 +17,112 @@ def read_mpi_stubs(source):
         return f.readlines()
 
 
+GPU_QUERIES = ("cuda", "ze", "hip")  # order matches MPIX_GPU_SUPPORT_* = 0, 1, 2
+
+# Declarations appended to the generated mpi.h (only written with --header-patch).
+GPU_HEADER_BLOCK = """
+/* GPU-support queries (vendor extensions provided by traMPI). */
+#ifndef MPIX_GPU_SUPPORT_CUDA
+enum { MPIX_GPU_SUPPORT_CUDA = 0, MPIX_GPU_SUPPORT_ZE = 1, MPIX_GPU_SUPPORT_HIP = 2 };
+#endif
+#ifndef MPIX_CUDA_AWARE_SUPPORT
+#define MPIX_CUDA_AWARE_SUPPORT 1
+#endif
+#ifndef MPIX_ROCM_AWARE_SUPPORT
+#define MPIX_ROCM_AWARE_SUPPORT 1
+#endif
+#ifdef __cplusplus
+extern "C" {
+#endif
+int MPIX_Query_cuda_support(void);
+int MPIX_Query_hip_support(void);
+int MPIX_Query_rocm_support(void);
+int MPIX_Query_ze_support(void);
+int MPIX_GPU_query_support(int gpu_type, int *is_supported);
+int PMPIX_Query_cuda_support(void);
+int PMPIX_Query_hip_support(void);
+int PMPIX_Query_rocm_support(void);
+int PMPIX_Query_ze_support(void);
+int PMPIX_GPU_query_support(int gpu_type, int *is_supported);
+#ifdef __cplusplus
+}
+#endif
+"""
+
+# (public suffix, backend symbol suffixes to try in order)
+_GPU_SIMPLE = (
+    ("cuda", ("cuda",)),
+    ("hip", ("hip", "rocm")),  # hip and rocm are the same question
+    ("rocm", ("hip", "rocm")),
+    ("ze", ("ze",)),
+)
+
+
+def inject_gpu_queries(out):
+    """
+    Emit the GPU-support queries.
+
+    These are not part of the MPI ABI, so they are optional in the backend:
+    each backend spelling (MPIX_ and PMPIX_) is looked up individually with
+    dlsym() and a missing one answers "not supported" (0) instead of failing.
+    Resolution happens in trampi_resolve_gpu_queries(), called from the
+    constructor once the backend handle is open.
+    """
+    out.write(r"""
+/* ---- GPU-support queries (optional vendor extensions) ---- */
+#define TRAMPI_GPU_CUDA 0
+#define TRAMPI_GPU_ZE 1
+#define TRAMPI_GPU_HIP 2
+
+typedef int (*trampi_gpu_query_t)(void);
+typedef int (*trampi_gpu_enum_query_t)(int, int *);
+
+""")
+    names = sorted({b for _, bs in _GPU_SIMPLE for b in bs})
+    for prefix in ("MPIX", "PMPIX"):
+        for n in names:
+            out.write(f"static trampi_gpu_query_t backend_{prefix}_Query_{n}_support = NULL;\n")
+        out.write(f"static trampi_gpu_enum_query_t backend_{prefix}_GPU_query_support = NULL;\n")
+
+    out.write("\nstatic void\ntrampi_resolve_gpu_queries(void *handle)\n{\n")
+    for prefix in ("MPIX", "PMPIX"):
+        for n in names:
+            out.write(
+                f'    *(void **)(&backend_{prefix}_Query_{n}_support) = '
+                f'dlsym(handle, "{prefix}_Query_{n}_support");\n'
+            )
+        out.write(
+            f'    *(void **)(&backend_{prefix}_GPU_query_support) = '
+            f'dlsym(handle, "{prefix}_GPU_query_support");\n'
+        )
+    out.write("}\n\n")
+
+    for prefix in ("MPIX", "PMPIX"):
+        for pub, bs in _GPU_SIMPLE:
+            out.write(f"int {prefix}_Query_{pub}_support(void);\n")
+            out.write(f"int {prefix}_Query_{pub}_support(void) {{\n")
+            for b in bs:
+                out.write(
+                    f"    if (backend_{prefix}_Query_{b}_support) "
+                    f"return backend_{prefix}_Query_{b}_support();\n"
+                )
+            out.write("    return 0;\n}\n")
+        out.write(f"int {prefix}_GPU_query_support(int gpu_type, int *is_supported);\n")
+        out.write(f"int {prefix}_GPU_query_support(int gpu_type, int *is_supported) {{\n")
+        out.write("    int ok;\n")
+        out.write("    if (gpu_type != TRAMPI_GPU_CUDA && gpu_type != TRAMPI_GPU_ZE && gpu_type != TRAMPI_GPU_HIP)\n")
+        out.write("        return MPI_ERR_ARG;\n")
+        out.write(f"    if (backend_{prefix}_GPU_query_support)\n")
+        out.write(f"        return backend_{prefix}_GPU_query_support(gpu_type, is_supported);\n")
+        out.write("    if (!is_supported)\n        return MPI_ERR_ARG;\n")
+        out.write(
+            f"    ok = gpu_type == TRAMPI_GPU_CUDA ? {prefix}_Query_cuda_support()\n"
+            f"       : gpu_type == TRAMPI_GPU_ZE ? {prefix}_Query_ze_support()\n"
+            f"       : {prefix}_Query_hip_support();\n"
+        )
+        out.write("    *is_supported = ok;\n    return MPI_SUCCESS;\n}\n\n")
+
+
 def inject_runtime_support(out, base_functions, extension_functions):
     all_functions = base_functions + extension_functions
     out.write("""
@@ -58,6 +164,8 @@ extern void *dlmopen(Lmid_t nsid, const char *filename, int flags);
     #
     for fn in all_functions:
         out.write(f"static fn_{fn.name}_t backend_{fn.name} = NULL;\n")
+
+    inject_gpu_queries(out)
 
     out.write(r"""
 
@@ -122,6 +230,8 @@ init_mpi_proxy(void)
     if (verbose) {
         fprintf(stderr, "TRAMPI:: Loaded backend MPI ABI library %s\n", lib);
     }
+
+    trampi_resolve_gpu_queries(handle);
 
 """)
 
