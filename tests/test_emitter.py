@@ -154,6 +154,24 @@ def test_emit_proxy_writes_trampolines_for_all_functions(tmp_path):
         assert f"Unable to resolve {name}" in text
 
 
+def test_emit_proxy_guards_against_missing_backend_symbols(tmp_path):
+    functions = _functions(tmp_path, "int MPI_Fake_fn(int *a);\nvoid MPI_Fake_void(void);\ndouble MPI_Fake_dbl(void);\n")
+    stubs = tmp_path / "mpilib.c"
+    stubs.write_text(
+        '#include "mpi.h"\n'
+        "int MPI_Fake_fn(int *a) { return 0; }\n"
+        "void MPI_Fake_void(void) { }\n"
+        "double MPI_Fake_dbl(void) { return 0.0; }\n",
+        encoding="utf8",
+    )
+    output = tmp_path / "mpi_proxy.c"
+    emit_proxy(functions=functions, extension_functions=[], mpi_stubs=str(stubs), output=output)
+    text = output.read_text(encoding="utf8")
+    assert "if (!backend_MPI_Fake_fn) return MPI_ERR_UNSUPPORTED_OPERATION; return backend_MPI_Fake_fn(a);" in text
+    assert "if (!backend_MPI_Fake_void) return; backend_MPI_Fake_void();" in text
+    assert 'if (!backend_MPI_Fake_dbl) trampi_missing_symbol("MPI_Fake_dbl"); return backend_MPI_Fake_dbl();' in text
+
+
 def test_emit_proxy_includes_extension_functions(tmp_path):
     functions = _functions(tmp_path, "int MPI_Fake_fn(int *a);\n")
     ext_header = tmp_path / "ext.h"

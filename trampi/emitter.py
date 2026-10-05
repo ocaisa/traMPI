@@ -61,6 +61,15 @@ extern void *dlmopen(Lmid_t nsid, const char *filename, int flags);
 
     out.write(r"""
 
+static void __attribute__((noreturn))
+trampi_missing_symbol(const char *name)
+{
+    fprintf(stderr,
+            "TRAMPI:: %s is not provided by the backend MPI library and cannot return an error code; aborting.\n",
+            name);
+    abort();
+}
+
 static void __attribute__((constructor))
 init_mpi_proxy(void)
 {
@@ -150,7 +159,7 @@ init_mpi_proxy(void)
     if (missing_symbols && verbose) {
     fprintf(stderr,
             "TRAMPI:: Warning: %d required MPI ABI symbols could not be resolved. "
-            "Calls to these functions will fail.\\n",
+            "Calls to these functions will return MPI_ERR_UNSUPPORTED_OPERATION (or abort if they cannot return an error code).\\n",
             missing_symbols);
     }
 
@@ -158,7 +167,7 @@ init_mpi_proxy(void)
         fprintf(stderr,
                 "TRAMPI:: Warning: %d optional MPI ABI extension symbols could not be resolved. "
                 "These functions were added by mpif and are not available in the backend MPI library. "
-                "Calls to these functions will fail.\\n",
+                "Calls to these functions will return MPI_ERR_UNSUPPORTED_OPERATION (or abort if they cannot return an error code).\\n",
                 missing_ext_symbols);
     }
 }
@@ -178,10 +187,22 @@ def wrapper_body(fn):
 
     call = ", ".join(p.name for p in fn.parameters if p.name)
 
+    #
+    # The backend may not provide every symbol (older MPI library, missing
+    # mpif patch, ...). Never call through a NULL pointer: report the error
+    # code where the return type allows it, otherwise abort with a message.
+    #
     if fn.return_type == "void":
-        return f"backend_{fn.name}({call}); "
+        guard = f"if (!backend_{fn.name}) return; "
+    elif fn.return_type == "int":
+        guard = f"if (!backend_{fn.name}) return MPI_ERR_UNSUPPORTED_OPERATION; "
+    else:
+        guard = f'if (!backend_{fn.name}) trampi_missing_symbol("{fn.name}"); '
 
-    return f"return backend_{fn.name}({call}); "
+    if fn.return_type == "void":
+        return f"{guard}backend_{fn.name}({call}); "
+
+    return f"{guard}return backend_{fn.name}({call}); "
 
 
 def emit_wrapper(out, fn):
